@@ -11,24 +11,38 @@ local origin = os.clock()
 local pointer = 1
 local round = 0
 local slots = {}
-for i = 1, kNumBuckets do
+for i = 1, kMaxSlots do
 	slots[i] = {}
 end
 
 function Timer.After(seconds, event)
-	local s = math.floor(s)
-	local c = s >> kMaxIntervalShift
-	local deltaSlot = s - c << kMaxIntervalShift
-	local slot = (pointer + deltaSlot) & kSlotsMask
-	local delta = seconds - s
+	local s = math.floor(seconds)
+	local slot = (pointer + s) & kSlotsMask
 	local events = slots[slot]
-	events[#events + 1] = { c, delta, event}
+	events[#events + 1] = {os.clock() + seconds, event}
 end
 
 function Timer.Update()
 	local cur = os.clock()
-	
-
+	local advance = math.floor(cur - origin)
+	for i = 0, advance do
+		local slot = ((pointer - 1 + i) & kSlotsMask) + 1
+		local events = slots[slot]
+		if #events > 0 then 
+			local eventsNotFired = {}
+			for _, evt in ipairs(events) do
+				if cur >= evt[1] then
+					evt[2]()
+				else
+					-- not fired
+					eventsNotFired[#eventsNotFired + 1] = evt
+				end
+			end
+			slots[slot] = eventsNotFired
+		end
+	end
+	origin = origin + advance
+	pointer = pointer + advance
 end
 
 return Timer
