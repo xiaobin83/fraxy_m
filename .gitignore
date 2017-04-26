@@ -31,4 +31,6 @@ sysinfo.txt
 
 Library/
 Temp/
-
+.vscode/
+*.orig
+*.orig.meta
