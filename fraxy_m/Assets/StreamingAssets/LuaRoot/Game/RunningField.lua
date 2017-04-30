@@ -1,6 +1,7 @@
 local Global = require 'Game/Global'
 
 local import = csharp.checked_import
+local Camera = import('UnityEngine.Camera')
 local GameObject = import('UnityEngine.GameObject')
 local LuaBehaviour = import('lua.LuaBehaviour')
 local Resources = import('UnityEngine.Resources')
@@ -8,7 +9,8 @@ local Resources = import('UnityEngine.Resources')
 local R = {}
 
 function R:Awake()
-	Global.RunningField = self
+	self.mainCamera = self:FindGameObject('MainCamera'):GetComponent(LuaBehaviour):GetBehaviourTable()
+	Global.RunningField = self	
 end
 
 local function DestroyGameObject(bt, delay)
@@ -34,8 +36,7 @@ end
 
 function R:NewSprite(spriteName)
 	local go = Global.Bridge:LoadSprite(spriteName)
-	local lb = go:AddComponent(LuaBehaviour)
-	lb:LoadScript('Game/SpriteBehaviour')
+	local lb = go:GetComponent(LuaBehaviour)
 	local t = lb:GetBehaviourTable()
 	t.Destroy = DestroyGameObject
 	return t
@@ -47,6 +48,7 @@ function R:SetDroid(droid)
 	end
 	if droid then
 		self.droid = droid
+		self.mainCamera:SetTarget(droid)
 		droid.transform:SetParent(self.transform)
 		droid:Reset()
 	end

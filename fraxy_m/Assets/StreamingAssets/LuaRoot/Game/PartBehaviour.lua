@@ -2,6 +2,10 @@ local Part = {}
 
 local G = require("Game/Global")
 
+function Part:Awake()
+	self.var = {}
+end
+
 function Part:CreateSprite()
 	if self.sprite then
 		self.sprite:Destroy()
@@ -24,6 +28,7 @@ end
 
 function Part:SetType(type)
 	if self.func_stop then
+		self:func_stop()
 		self:func_detach()
 	end
 	self.type = type
@@ -35,6 +40,7 @@ end
 
 function Part:Update()
 	self:func_step()
+	self.sprite:OnStatusUpdated(self)
 end
 
 function Part:Reset()

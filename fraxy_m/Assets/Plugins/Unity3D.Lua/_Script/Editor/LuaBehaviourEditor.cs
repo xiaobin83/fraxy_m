@@ -314,7 +314,6 @@ namespace lua
 
 			var serializedKeys = serializedObject.FindProperty("keys");
 			var serializedGameObjects = serializedObject.FindProperty("gameObjects");
-			Debug.Assert(serializedKeys.arraySize == serializedGameObjects.arraySize);
 
 			EditorGUILayout.BeginVertical();
 			var idToDelete = -1;
