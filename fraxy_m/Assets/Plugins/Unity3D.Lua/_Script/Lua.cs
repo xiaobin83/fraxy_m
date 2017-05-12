@@ -218,6 +218,19 @@ namespace lua
 			"end";
 		LuaFunction testBytes;
 
+
+		const string kLuaStub_AsArray = 
+			"return function(t, tbl)\n" +
+			"  if #tbl > 0 then\n" +
+			"    local arr = csharp.make_array(t, #tbl)\n" +
+			"    for i, e in ipairs(tbl) do\n"+
+			"      arr[i-1] = e\n"+
+			"    end\n"+
+			"    return arr\n" + 
+			"  end\n" + 
+			"  return nil\n" +
+			"end";
+
 		const string kLuaStub_CheckedImport = 
 			"function(lib) return csharp.check_error(csharp.import(lib)) end";
 
@@ -226,6 +239,96 @@ namespace lua
 		static int _Break(IntPtr L)
 		{
 			return 0;
+		}
+
+		[MonoPInvokeCallback(typeof(Api.lua_CFunction))]
+		static int MakeArray(IntPtr L)
+		{
+			Type typeObj;
+			if (Api.lua_isstring(L, 1))
+			{
+				var typeName = Api.lua_tostring(L, 1);
+				if (typeName == "string")
+				{
+					typeObj = typeof(string);
+				}
+				else if (typeName == "int")
+				{
+					typeObj = typeof(int);
+				}
+				else if (typeName == "float")
+				{
+					typeObj = typeof(float);
+				}
+				else if (typeName == "double")
+				{
+					typeObj = typeof(double);
+				}
+				else if (typeName == "long")
+				{
+					typeObj = typeof(long);
+				}
+				else if (typeName == "byte")
+				{
+					typeObj = typeof(byte);
+				}
+				else if (typeName == "char")
+				{
+					typeObj = typeof(char);
+				}
+				else if (typeName == "uint")
+				{
+					typeObj = typeof(uint);
+				}
+				else if (typeName == "ulong")
+				{
+					typeObj = typeof(ulong);
+				}
+				else
+				{
+					try
+					{
+						typeObj = loadType(typeName);
+					}
+					catch (Exception e)
+					{
+						PushErrorObject(L, e.Message);
+						return 1;
+					}
+				}
+				if (typeObj == null)
+				{
+					PushErrorObject(L, string.Format("MakeArray error, typeName = '{0}' at argument 1 not found", typeName));
+					return 1;
+				}
+			}
+			else
+			{
+				typeObj = (Type)ObjectAtInternal(L, 1);
+				if (typeObj == null)
+				{
+					PushErrorObject(L, "MakeArray error, expected Type object for argument 1 but nil got");
+					return 1;
+				}
+			}
+
+			if (!Api.lua_isnumber(L, 2))
+			{
+				PushErrorObject(L, "MakeArray error, expected number for argument 2");
+				return 1;
+			}
+
+			var length = (int)Api.lua_tonumber(L, 2);
+			if (typeObj is Type)
+			{
+				var obj = Array.CreateInstance((Type)typeObj, length);
+				PushObjectInternal(L, obj);
+			}
+			else
+			{
+				PushErrorObject(L, string.Format("MakeArray error, expected Type object but {0} got", typeObj.GetType().ToString()));
+			}
+			return 1;
 		}
 
 		public Lua()
@@ -272,7 +375,12 @@ namespace lua
 				// addPath (C#)
 				addPath = LuaFunction.NewFunction(this, kLuaStub_AddPath, "add_path");
 
-
+				// csharp.as_array (lua)
+				DoString(kLuaStub_AsArray, 1);
+				var asArray = LuaFunction.MakeRefTo(this, -1);
+				csharp["as_array"] = asArray;
+				asArray.Dispose();
+				Api.lua_pop(L, 1);
 
 				// csharp.to_bytes (lua) and test_bytes (C#)
 				DoString(kLuaStub_Bytes, 2);
@@ -283,10 +391,6 @@ namespace lua
 				asBytes.Dispose();
 
 				Api.lua_pop(L, 2); // pop those
-
-
-
-
 
 				LuaAdditionalFunctions.Open(this);
 			}
@@ -530,6 +634,7 @@ namespace lua
 				new Api.luaL_Reg("import", Import),
 				new Api.luaL_Reg("dofile", DoFile),
 				new Api.luaL_Reg("_break", _Break),
+				new Api.luaL_Reg("make_array", MakeArray)
 			};
 			Api.luaL_newlib(L, regs);
 			return 1;
@@ -555,7 +660,8 @@ namespace lua
 				if (!Application.isPlaying)
 				{
 					var load = LuaTypeLoaderAttribute.GetLoader();
-					type = load(typename);
+					if (load != null)
+						type = load(typename);
 				}
 #endif
 			}
@@ -864,12 +970,13 @@ namespace lua
 			return 0;
 		}
 
+
 		internal const string objectMetaTable = "object_meta";
 		internal const string classMetaTable = "class_meta";
 
-
+	
 		// [-0,	+1,	m]
- 		// return 1 if Metatable of object is newly created. 
+		// return 1 if Metatable of object is newly created. 
 		internal int PushObject(object obj, string metaTableName = objectMetaTable)
 		{
 			return PushObjectInternal(L, obj, metaTableName);
@@ -895,10 +1002,16 @@ namespace lua
 			return ObjectAtInternal(L, idx);
 		}
 
-		internal static object ObjectAtInternal(IntPtr L, int idx)
+		internal static IntPtr TestUdata(IntPtr L, int idx)
 		{
 			var userdata = Api.luaL_testudata(L, idx, objectMetaTable);
 			if (userdata == IntPtr.Zero) userdata = Api.luaL_testudata(L, idx, classMetaTable);
+			return userdata;
+		}
+
+		internal static object ObjectAtInternal(IntPtr L, int idx)
+		{
+			var userdata = TestUdata(L, idx);
 			if (userdata != IntPtr.Zero)
 				return UdataToObject(userdata);
 			return null;
@@ -1413,14 +1526,13 @@ namespace lua
 			return actualArgs.GetValue(idx);
 		}
 
-		internal static object[] ArgsFrom(IntPtr L, System.Reflection.ParameterInfo[] args, int argStart, int numArgs, out IDisposable[] disposableArgs)
+		internal static object[] ArgsFrom(IntPtr L, System.Reflection.ParameterInfo[] args, System.Reflection.ParameterInfo variadicArg, int argStart, int numArgs, out IDisposable[] disposableArgs)
 		{
 			if (args == null || args.Length == 0)
 			{
 				disposableArgs = null;
 				return csharpArgs_NoArgs;
 			}
-			var variadicArg = IsLastArgVariadic(args);
 
 			var luaArgCount = numArgs;
 			var requiredArgCount = args.Length;
@@ -1522,42 +1634,37 @@ namespace lua
 			return sb.ToString();
 		}
 
-		static Dictionary<Type, Dictionary<string, System.Reflection.MethodBase>> methodCache = new Dictionary<Type, Dictionary<string, System.Reflection.MethodBase>>();
-		static bool useMethodCache = true;
-
-		public static bool UseMethodCache(bool useMethodCache_ = true)
+		internal class MethodCache
 		{
-			var wasUsingMethodCache = useMethodCache;
-			useMethodCache = useMethodCache_;
-			return wasUsingMethodCache;
-		}
+			public System.Reflection.MethodBase method;
+			public System.Reflection.ParameterInfo[] parameters;
+			public System.Reflection.ParameterInfo variadicArg;
+        }
+		static Dictionary<Type, Dictionary<string, MethodCache>> methodCache = new Dictionary<Type, Dictionary<string, MethodCache>>();
+
 		public static void CleanMethodCache()
 		{
-			lock (methodCache)
-			{
-				methodCache.Clear();
-			}
+			methodCache.Clear();
 		}
 
-		internal static System.Reflection.MethodBase GetMethodFromCache(Type targetType, string mangledName)
+		internal static MethodCache GetMethodFromCache(Type targetType, string mangledName)
 		{
-			if (!useMethodCache) return null;
-
-			System.Reflection.MethodBase method = null;
-			lock (methodCache)
+			MethodCache method = null;
+			Dictionary<string, MethodCache> cachedMethods;
+			if (methodCache.TryGetValue(targetType, out cachedMethods))
 			{
-				Dictionary<string, System.Reflection.MethodBase> cachedMethods;
-				if (methodCache.TryGetValue(targetType, out cachedMethods))
-				{
-					cachedMethods.TryGetValue(mangledName, out method);
-				}
+				cachedMethods.TryGetValue(mangledName, out method);
 			}
+
 			return method;
 		}
 
+		System.Text.StringBuilder tempSb = new System.Text.StringBuilder();
 		internal string Mangle(string methodName, int[] luaArgTypes, bool invokingStaticMethod, int argStart)
 		{
-			var sb = new System.Text.StringBuilder();
+			var sb = tempSb;
+			sb.Length = 0;
+
 			if (invokingStaticMethod)
 			{
 				sb.Append("_s_");
@@ -1575,7 +1682,7 @@ namespace lua
 				if (luaArgTypes[i] == Api.LUA_TUSERDATA)
 				{
 					sb.Append('c');
-					var obj = ObjectAt(argStart + i);
+					var obj = ObjectAtInternal(L, argStart + i);
 					if (obj != null)
 					{
 						sb.Append(obj.GetType().FullName);
@@ -1590,20 +1697,23 @@ namespace lua
 			return sb.ToString();
 		}
 
-		internal static void CacheMethod(IntPtr L, Type targetType, string mangledName, System.Reflection.MethodBase method)
+		internal static MethodCache CacheMethod(Type targetType, string mangledName, System.Reflection.MethodBase method, System.Reflection.ParameterInfo[] parameters)
 		{
-			if (!useMethodCache) return;
-			lock (methodCache)
+			Dictionary<string, MethodCache> cachedMethods;
+			if (!methodCache.TryGetValue(targetType, out cachedMethods))
 			{
-				Dictionary<string, System.Reflection.MethodBase> cachedMethods;
-				if (!methodCache.TryGetValue(targetType, out cachedMethods))
-				{
-					cachedMethods = new Dictionary<string, System.Reflection.MethodBase>();
-					methodCache.Add(targetType, cachedMethods);
-				}
-				Assert(!cachedMethods.ContainsKey(mangledName), string.Format("{0} of {1} already cached with mangled name {2}", method.ToString(), targetType.ToString(), mangledName));
-				cachedMethods.Add(mangledName, method);
+				cachedMethods = new Dictionary<string, MethodCache>();
+				methodCache.Add(targetType, cachedMethods);
 			}
+			Assert(!cachedMethods.ContainsKey(mangledName), string.Format("{0} of {1} already cached with mangled name {2}", method.ToString(), targetType.ToString(), mangledName));
+			var cachedData = new MethodCache()
+			{
+				method = method,
+				parameters = parameters,
+				variadicArg = IsLastArgVariadic(parameters),
+			};
+			cachedMethods.Add(mangledName, cachedData);
+			return cachedData;
 		}
 
 		internal static void PushErrorObject(IntPtr L, string message) // No Throw
@@ -1722,14 +1832,15 @@ namespace lua
 			}
 		}
 
-		static System.Reflection.MethodBase MatchMethod(IntPtr L, 
+		static MethodCache MatchMethod(IntPtr L, 
 			Type invokingType, Type type, string methodName, string mangledName, bool invokingStaticMethod,
-			ref object target, int argStart, int[] luaArgTypes, ref System.Reflection.ParameterInfo[] parameters)
+			ref object target, int argStart, int[] luaArgTypes)
 		{
 			System.Reflection.MethodBase method;
 			var members = type.GetMember(methodName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
 			var score = Int32.MinValue;
 			System.Reflection.MethodBase selected = null;
+			System.Reflection.ParameterInfo[] parameters = null;
 			List<Exception> pendingExceptions = null;
 			foreach (var member in members)
 			{
@@ -1737,12 +1848,18 @@ namespace lua
 				var m = (System.Reflection.MethodInfo)member;
 				if (m.IsStatic)
 				{
-					Assert(invokingStaticMethod, string.Format("invoking static method {0} with incorrect syntax.", m.ToString()));
+					if (!invokingStaticMethod)
+					{
+						Assert(false, string.Format("invoking static method {0} with incorrect syntax.", m.ToString()));
+					}
 					target = null;
 				}
 				else
 				{
-					Assert(!invokingStaticMethod, string.Format("invoking non-static method {0} with incorrect syntax.", m.ToString()));
+					if (invokingStaticMethod)
+					{
+						Assert(false, string.Format("invoking non-static method {0} with incorrect syntax.", m.ToString()));
+					}
 				}
 				try
 				{
@@ -1762,16 +1879,16 @@ namespace lua
 			method = selected;
 			if (method != null)
 			{
-				CacheMethod(L, invokingType, mangledName, method);
+				return CacheMethod(invokingType, mangledName, method, parameters);
+			}
+
+			if (type != typeof(object))
+			{
+				// search into parent
+				return MatchMethod(L, invokingType, type.BaseType, methodName, mangledName, invokingStaticMethod, ref target, argStart, luaArgTypes);
 			}
 			else
 			{
-				if (type != typeof(object))
-				{
-					// search into parent
-					return MatchMethod(L, invokingType, type.BaseType, methodName, mangledName, invokingStaticMethod, ref target, argStart, luaArgTypes, ref parameters);
-				}
-
 				var additionalMessage = string.Empty;
 				if (pendingExceptions != null && pendingExceptions.Count > 0)
 				{
@@ -1784,7 +1901,6 @@ namespace lua
 				}
 				throw new Exception(string.Format("no corresponding csharp method for {0}\n{1}", GetLuaInvokingSigniture(methodName, luaArgTypes), additionalMessage));
 			}
-			return method;
 		}
 
 		static int InvokeMethodInternal(IntPtr L)
@@ -1859,7 +1975,10 @@ namespace lua
 			if (isInvokingFromClass)
 			{
 				type = (System.Type)obj;
-				Assert(invokingStaticMethod, string.Format("invoking static method {0} from class {1} with incorrect syntax", methodName, type.ToString()));
+				if (!invokingStaticMethod)
+				{
+					Assert(false, string.Format("invoking static method {0} from class {1} with incorrect syntax", methodName, type.ToString()));
+				}
 			}
 			else
 			{
@@ -1868,24 +1987,20 @@ namespace lua
 			}
 
 			var mangledName = CheckHost(L).Mangle(methodName, luaArgTypes, invokingStaticMethod, argStart);
-			var method = GetMethodFromCache(type, mangledName);
-			System.Reflection.ParameterInfo[] parameters = null;
 
-			if (method == null)
+			var mc = GetMethodFromCache(type, mangledName);
+			if (mc == null)
 			{
-				method = MatchMethod(L, type, type, methodName, mangledName, invokingStaticMethod, ref target, argStart, luaArgTypes, ref parameters);
-			}
-			else
-			{
-				parameters = method.GetParameters();
+				// match method	throws not matching exception
+				mc = MatchMethod(L, type, type, methodName, mangledName, invokingStaticMethod, ref target, argStart, luaArgTypes);
 			}
 
 			var top = Api.lua_gettop(L);
 			IDisposable[] disposableArgs;
-			var actualArgs = ArgsFrom(L, parameters, argStart, luaArgTypes.Length, out disposableArgs);
+			var actualArgs = ArgsFrom(L, mc.parameters, mc.variadicArg, argStart, luaArgTypes.Length, out disposableArgs);
 			Assert(top == Api.lua_gettop(L), "stack changed after converted args from lua.");
 
-			var retVal = method.Invoke(target, actualArgs);
+			var retVal = mc.method.Invoke(target, actualArgs);
 
 			if (disposableArgs != null)
 			{
@@ -1910,9 +2025,9 @@ namespace lua
 				++outValues;
 			}
 			// out and ref parameters
-			for (int i = 0; i < parameters.Length; ++i)
+			for (int i = 0; i < mc.parameters.Length; ++i)
 			{
-				if (parameters[i].IsOut || parameters[i].ParameterType.IsByRef)
+				if (mc.parameters[i].IsOut || mc.parameters[i].ParameterType.IsByRef)
 				{
 					PushValueInternal(L, actualArgs[i]);
 					++outValues;
@@ -2123,44 +2238,85 @@ namespace lua
 			}
 		}
 
+		static Dictionary<Type, Dictionary<string, System.Reflection.MemberInfo>> memberCache = new Dictionary<Type, Dictionary<string, System.Reflection.MemberInfo>>();
+
+
+		public static void CleanMemberCache()
+		{
+			memberCache.Clear();
+		}
+
+		static void CacheMember(Type type, string memberName, System.Reflection.MemberInfo mi)
+		{
+			Dictionary<string, System.Reflection.MemberInfo> cache;
+			if (!memberCache.TryGetValue(type, out cache))
+			{
+				cache = new Dictionary<string, System.Reflection.MemberInfo>();
+				memberCache[type] = cache;
+			}
+			cache.Add(memberName, mi);
+		}
+		static bool GetMemberFromCache(Type type, string memberName, out System.Reflection.MemberInfo mi)
+		{
+			Dictionary<string, System.Reflection.MemberInfo> cache;
+			if (memberCache.TryGetValue(type, out cache))
+			{
+				return cache.TryGetValue(memberName, out mi);
+			}
+			mi = null;
+			return false;
+		}
+
 		internal static int GetMember(IntPtr L, object obj, Type objType, string memberName)
 		{
-			var members = objType.GetMember(memberName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
-			if (members.Length > 0)
+			System.Reflection.MemberInfo member = null;
+			var hasCachedMember = GetMemberFromCache(objType, memberName, out member);
+			if (!hasCachedMember)
 			{
-				var member = members[0];
-				if (member.MemberType == System.Reflection.MemberTypes.Field)
+				var members = objType.GetMember(memberName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
+				if (members.Length > 0)
 				{
-					var field = (System.Reflection.FieldInfo)member;
-					PushValueInternal(L, field.GetValue(obj));
-					return 1;
+					member = members[0];
 				}
-				else if (member.MemberType == System.Reflection.MemberTypes.Property)
-				{
-					var prop = (System.Reflection.PropertyInfo)member;
-					try
-					{
-						PushValueInternal(L, prop.GetValue(obj, null));
-						return 1;
-					}
-					catch (ArgumentException ae)
-					{
-						// search into base	class of obj
-						Assert(objType != typeof(object), string.Format("Member {0} not found. {1}", memberName, ae.Message));
-						return GetMember(L, obj, objType.BaseType, memberName);
-					}
-				}
-				else if (member.MemberType == System.Reflection.MemberTypes.Method)
-				{
-					bool isInvokingFromClass = (obj == null);
-					Api.lua_pushboolean(L, isInvokingFromClass);      // upvalue 1 --> isInvokingFromClass
-					Api.lua_pushvalue(L, 1);                          // upvalue 2 --> userdata, first parameter of __index
-					Api.lua_pushvalue(L, 2);                          // upvalue 3 --> member name
-					Api.lua_pushcclosure(L, InvokeMethod, 3);         // return a wrapped lua_CFunction
-					return 1;
-				}
+				CacheMember(objType, memberName, member);
+			}
 
+			if (member == null)
+			{
+				// search into base	class of obj
+				if (objType != typeof(object))
+					return GetMember(L, obj, objType.BaseType, memberName);
 				Api.lua_pushnil(L);
+				return 1;
+			}
+			else if (member.MemberType == System.Reflection.MemberTypes.Field)
+			{
+				var field = (System.Reflection.FieldInfo)member;
+				PushValueInternal(L, field.GetValue(obj));
+				return 1;
+			}
+			else if (member.MemberType == System.Reflection.MemberTypes.Property)
+			{
+				var prop = (System.Reflection.PropertyInfo)member;
+				try
+				{
+					PushValueInternal(L, prop.GetValue(obj, null));
+					return 1;
+				}
+				catch (ArgumentException ae)
+				{
+					// search into base	class of obj
+					Assert(objType != typeof(object), string.Format("Member {0} not found. {1}", memberName, ae.Message));
+					return GetMember(L, obj, objType.BaseType, memberName);
+				}
+			}
+			else if (member.MemberType == System.Reflection.MemberTypes.Method)
+			{
+				bool isInvokingFromClass = (obj == null);
+				Api.lua_pushboolean(L, isInvokingFromClass);      // upvalue 1 --> isInvokingFromClass
+				Api.lua_pushvalue(L, 1);                          // upvalue 2 --> userdata, first parameter of __index
+				Api.lua_pushvalue(L, 2);                          // upvalue 3 --> member name
+				Api.lua_pushcclosure(L, InvokeMethod, 3);         // return a wrapped lua_CFunction
 				return 1;
 			}
 			else
@@ -2303,49 +2459,65 @@ namespace lua
 
 		internal static void SetMember(IntPtr L, object thisObject, Type type, string memberName, object value)
 		{
-			Assert(type.IsClass || type.IsAnsiClass, string.Format("Setting property {0} of {1} object", memberName, type.ToString()));
-
-			var members = type.GetMember(memberName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
-			Assert(members.Length > 0, string.Format("Cannot find property with name {0} of type {1}", memberName, type.ToString()));
-
-			if (members.Length > 0)
+			if (!type.IsClass && !type.IsAnsiClass)
 			{
-				var member = members[0];
-				if (member.MemberType == System.Reflection.MemberTypes.Field)
+				Assert(false, string.Format("Setting property {0} of {1} object", memberName, type.ToString()));
+			}
+
+			System.Reflection.MemberInfo member;
+			if (!GetMemberFromCache(type, memberName, out member))
+			{
+				var members = type.GetMember(memberName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
+				if (members.Length > 0)
 				{
-					var field = (System.Reflection.FieldInfo)member;
-					var fieldType = field.FieldType;
-					object converted;
-					if (TryConvertTo(fieldType, value, out converted))
-					{
-						field.SetValue(thisObject, converted);
-					}
-					else
-					{
-						converted = System.Convert.ChangeType(value, fieldType);
-						field.SetValue(thisObject, converted);
-					}
-				}
-				else if (member.MemberType == System.Reflection.MemberTypes.Property)
-				{
-					var prop = (System.Reflection.PropertyInfo)member;
-					var propType = prop.PropertyType;
-					object converted;
-					if (TryConvertTo(propType, value, out converted))
-					{
-						prop.SetValue(thisObject, converted, null);
-					}
-					else
-					{
-						converted = System.Convert.ChangeType(value, propType);
-						prop.SetValue(thisObject, converted, null);
-					}
+					member = members[0];
 				}
 				else
 				{
-					Assert(false, string.Format("Member type {0} and {1} expected, but {2} got.", 
-						System.Reflection.MemberTypes.Field, System.Reflection.MemberTypes.Property, member.MemberType));
+					Assert(false, string.Format("Cannot find property with name {0} of type {1}", memberName, type.ToString()));
+
 				}
+				CacheMember(type, memberName, member);
+			}
+
+			if (member == null)
+			{
+				Assert(false, string.Format("Cannot find property with name {0} of type {1}", memberName, type.ToString()));
+			}
+			else if (member.MemberType == System.Reflection.MemberTypes.Field)
+			{
+				var field = (System.Reflection.FieldInfo)member;
+				var fieldType = field.FieldType;
+				object converted;
+				if (TryConvertTo(fieldType, value, out converted))
+				{
+					field.SetValue(thisObject, converted);
+				}
+				else
+				{
+					converted = System.Convert.ChangeType(value, fieldType);
+					field.SetValue(thisObject, converted);
+				}
+			}
+			else if (member.MemberType == System.Reflection.MemberTypes.Property)
+			{
+				var prop = (System.Reflection.PropertyInfo)member;
+				var propType = prop.PropertyType;
+				object converted;
+				if (TryConvertTo(propType, value, out converted))
+				{
+					prop.SetValue(thisObject, converted, null);
+				}
+				else
+				{
+					converted = System.Convert.ChangeType(value, propType);
+					prop.SetValue(thisObject, converted, null);
+				}
+			}
+			else
+			{
+				Assert(false, string.Format("Member type {0} and {1} expected, but {2} got.",
+					System.Reflection.MemberTypes.Field, System.Reflection.MemberTypes.Property, member.MemberType));
 			}
 		}
 
@@ -2364,18 +2536,17 @@ namespace lua
 
 		}
 
-		static readonly KeyValuePair<string, int>[] binaryOps = new KeyValuePair<string, int>[]
+		static readonly KeyValuePair<string, BinaryOp>[] binaryOps = new KeyValuePair<string, BinaryOp>[]
 		{
-			new KeyValuePair<string, int>("__add", (int)BinaryOp.op_Addition),
-			new KeyValuePair<string, int>("__sub", (int)BinaryOp.op_Subtraction),
-			new KeyValuePair<string, int>("__mul", (int)BinaryOp.op_Multiply),
-			new KeyValuePair<string, int>("__div", (int)BinaryOp.op_Division),
-			new KeyValuePair<string, int>("__mod", (int)BinaryOp.op_Modulus),
+			new KeyValuePair<string, BinaryOp>("__add", BinaryOp.op_Addition),
+			new KeyValuePair<string, BinaryOp>("__sub", BinaryOp.op_Subtraction),
+			new KeyValuePair<string, BinaryOp>("__mul", BinaryOp.op_Multiply),
+			new KeyValuePair<string, BinaryOp>("__div", BinaryOp.op_Division),
+			new KeyValuePair<string, BinaryOp>("__mod", BinaryOp.op_Modulus),
 
-			new KeyValuePair<string, int>("__eq", (int)BinaryOp.op_Equality),
-			new KeyValuePair<string, int>("__lt", (int)BinaryOp.op_LessThan),
-			new KeyValuePair<string, int>("__le", (int)BinaryOp.op_LessThanOrEqual),
-
+			new KeyValuePair<string, BinaryOp>("__eq", BinaryOp.op_Equality),
+			new KeyValuePair<string, BinaryOp>("__lt", BinaryOp.op_LessThan),
+			new KeyValuePair<string, BinaryOp>("__le", BinaryOp.op_LessThanOrEqual),
 		};
 
 		internal enum UnaryOp
@@ -2383,9 +2554,9 @@ namespace lua
 			op_UnaryNegation = 0,
 		}
 
-		static readonly KeyValuePair<string, int>[] unaryOps = new KeyValuePair<string, int>[]
+		static readonly KeyValuePair<string, UnaryOp>[] unaryOps = new KeyValuePair<string, UnaryOp>[]
 		{
-			new KeyValuePair<string, int>("__unm", (int)UnaryOp.op_UnaryNegation),
+			new KeyValuePair<string, UnaryOp>("__unm", UnaryOp.op_UnaryNegation),
 		};
 
 
@@ -2400,14 +2571,14 @@ namespace lua
 
 				foreach (var op in binaryOps)
 				{
-					Api.lua_pushinteger(L, op.Value);
+					Api.lua_pushstring(L, op.Value.ToString());
 					Api.lua_pushcclosure(L, MetaMethod.MetaBinaryOpFunction, 1);
 					Api.lua_setfield(L, -2, op.Key);
 				}
 
 				foreach(var op in unaryOps)
 				{
-					Api.lua_pushinteger(L, op.Value);
+					Api.lua_pushstring(L, op.Value.ToString());
 					Api.lua_pushcclosure(L, MetaMethod.MetaUnaryOpFunction, 1);
 					Api.lua_setfield(L, -2, op.Key);
 				}

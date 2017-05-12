@@ -54,5 +54,11 @@ function R:SetDroid(droid)
 	end
 end
 
+function R:Reset()
+	if self.droid then
+		self.droid:Reset()
+	end
+end
+
 
 return R

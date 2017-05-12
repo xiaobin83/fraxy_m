@@ -476,6 +476,10 @@ namespace lua
 					{
 						values[i] = EditorGUILayout.ColorField(key, (Color)value);
 					}
+					else if (type == typeof(System.Boolean))
+					{
+						values[i] = EditorGUILayout.Toggle(key, (System.Boolean)value);
+					}
 					else
 					{
 						EditorGUILayout.LabelField(string.Format("not support type {0} with key {1}", type, key));
@@ -589,6 +593,10 @@ namespace lua
 				return string.Format("{0}({1}, {2}, {3}, {4})", 
 					typeConstructionLiteral,
 					c.r, c.g, c.b, c.a);
+			}
+			else if (type == typeof(System.Boolean))
+			{
+				return value.ToString().ToLower();
 			}
 			return value.ToString();
 		}
