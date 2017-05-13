@@ -1,8 +1,6 @@
-local Debug = true
-
 local Bridge = {}
-local Global = require('Game/Global')
 local LuaBridge = csharp.checked_import('LuaBridge')
+local LuaBehaviour = csharp.checked_import('lua.LuaBehaviour')
 local Input = require('Input')
 local Timer = require('Timer')
 local Debug = require('Debug')
@@ -10,25 +8,15 @@ local Debug = require('Debug')
 local UpdateInputPerSecond
 
 function Bridge:Awake()
-	if Debug then
-		local debuggee = require 'vscode-debuggee'
-		local json = require 'json'
-		local result, type = debuggee.start(json, {})
-		Debug.Log('start debug '.. type .. ' ' .. tostring(result))
-		self.debuggeePoll = debuggee.poll
-	end
-	self.bridge = LuaBridge.current
-	Global.Bridge = self
+	self.bridgeToNative = LuaBridge.current
 	UpdateInputPerSecond = function()
 		Input:DetectController(self)
 		Timer.After(1, UpdateInputPerSecond)	
 	end
 	UpdateInputPerSecond()
+	Bridge.current = self
 end
 
-function Bridge:LoadSprite(spriteName)
-	return self.bridge:LoadSprite(spriteName)
-end
 
 function Bridge:OnJoystickConnected(name, state)
 	Debug.Log("Bridge - Joystick connected " .. name)
@@ -40,6 +28,26 @@ end
 
 function Bridge:Update()
 	Timer.Update()
+end
+
+function Bridge.LoadSprite(spriteName)
+	local c = Bridge.current
+	if not c then return nil end
+	return c.bridgeToNative:LoadSprite(spriteName)
+end
+
+function Bridge.GetLBT(lbObj)
+	return lbObj:GetComponent(LuaBehaviour):GetBehaviourTable()
+end
+
+function Bridge.FindLBT(lbObj, name)
+	return Bridge.GetLBT(lbObj:FindGameObject(name))
+end
+
+function Bridge.AddScript(obj, scriptName)
+	local lb = obj:AddComponent(LuaBehaviour)
+	lb:LoadScript(scriptName)
+	return lb:GetBehaviourTable()
 end
 
 return Bridge

@@ -1,8 +1,9 @@
 local Debug = require 'Debug'
-local Console = require 'Console'
+local Global = require 'Game/Global'
+local Console = require 'Game/UI/Console'
 local Input = require 'Input'
 local RB = csharp.checked_import('UnityEngine.Rigidbody2D')
-local Text = csharp.checked_import('UnityEngine.UI.Text')
+local Text = Global.UI.Text
 local Vector2 = csharp.checked_import('UnityEngine.Vector2')
 local CC = {}
 

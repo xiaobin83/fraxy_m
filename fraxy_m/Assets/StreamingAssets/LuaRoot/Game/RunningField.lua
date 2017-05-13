@@ -2,15 +2,29 @@ local Global = require 'Game/Global'
 
 local import = csharp.checked_import
 local Camera = import('UnityEngine.Camera')
-local GameObject = import('UnityEngine.GameObject')
-local LuaBehaviour = import('lua.LuaBehaviour')
+local GameObject = Global.GameObject
 local Resources = import('UnityEngine.Resources')
+local Droid = require 'Game/Droid'
+local Bridge = require 'Game/Bridge'
+
 
 local R = {}
 
 function R:Awake()
-	self.mainCamera = self:FindGameObject('MainCamera'):GetComponent(LuaBehaviour):GetBehaviourTable()
+	self.mainCamera = Bridge.FindLBT(self, 'MainCamera')
+	self.UI = Bridge.FindLBT(self, 'UI')
 	Global.RunningField = self	
+end
+
+function R:Start()
+	self.UI:AddFunc(
+		"New Part",
+		function()
+			if not self.dorid then
+				local part = Droid:NewPart('controlledCore')
+				self:SetDroid(Droid:Build({part}))
+			end
+		end)
 end
 
 local function DestroyGameObject(bt, delay)
@@ -23,9 +37,7 @@ end
 
 local function NewGameObject(name, script)
 	local go = GameObject(name or 'GameObject')
-	local lb = go:AddComponent(LuaBehaviour)
-	lb:LoadScript(script)
-	local t = lb:GetBehaviourTable()
+	local t = Bridge.AddScript(go, script)
 	t.Destroy = DestroyGameObject
 	return t
 end
@@ -35,9 +47,8 @@ function R:NewPart(name)
 end
 
 function R:NewSprite(spriteName)
-	local go = Global.Bridge:LoadSprite(spriteName)
-	local lb = go:GetComponent(LuaBehaviour)
-	local t = lb:GetBehaviourTable()
+	local go = Bridge.LoadSprite(spriteName)
+	local t = Bridge.GetLBT(go)
 	t.Destroy = DestroyGameObject
 	return t
 end

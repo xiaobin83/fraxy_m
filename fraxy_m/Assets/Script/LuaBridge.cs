@@ -4,6 +4,8 @@ using System.Collections.Generic;
 
 public class LuaBridge : MonoBehaviour
 {
+	public bool enableDebug = true;
+
 	public static LuaBridge current;
 	public static lua.Lua luaState;
 
@@ -15,6 +17,11 @@ public class LuaBridge : MonoBehaviour
 		lua.Lua.typeLoader = TypeLoader;
 		luaState = new lua.Lua();
 		lua.LuaBehaviour.SetLua(luaState);
+
+		if (enableDebug)
+		{
+			lua.LuaDebugging.StartDebugging();
+		}
 
 		current = this;
 	}
