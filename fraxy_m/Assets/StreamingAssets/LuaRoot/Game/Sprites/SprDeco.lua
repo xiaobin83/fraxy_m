@@ -1,0 +1,3 @@
+local SprDeco = {}
+
+return SprDeco

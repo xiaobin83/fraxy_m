@@ -1,9 +1,10 @@
 local Part = {}
-
-local G = require("Game/Global")
+local Global = require("Game/Global")
+local Debug = require 'Debug'
 
 function Part:Awake()
 	self.var = {}
+	self.subparts = {}
 end
 
 function Part:CreateSprite()
@@ -11,19 +12,13 @@ function Part:CreateSprite()
 		self.sprite:Destroy()
 		self.sprite = nil
 	end
-	local spr = G.RunningField:NewSprite(self.type.sprite)
+	local spr = Global.RunningField:NewSprite(self.type.sprite)
 	spr.transform:SetParent(self.transform)
 	self.sprite = spr
 end
 
 function Part:CreateScript()
-	local script = self.type.script
-	self.func_attach = script.Attach
-	self.func_detach = script.Detach
-	self.func_start = script.Start
-	self.func_stop = script.Stop
-	self.func_step = script.Step
-	self.func_reset = script.Reset
+	self.script = self.type.script
 end
 
 function Part:SetType(type)
@@ -32,19 +27,31 @@ function Part:SetType(type)
 		self:func_detach()
 	end
 	self.type = type
+	self.script = type.script
 	self:CreateSprite()
-	self:CreateScript()
-	self:func_attach()
-	self:func_start()
+	if self.script.Attach then
+		self.script.Attach(self)
+	end
+	if self.script.Start then
+		self.script.Start(self)
+	end
 end
 
 function Part:Update()
-	self:func_step()
-	self.sprite:OnStatusUpdated(self)
+	local f = self.script.Step
+	if f then f(self) end
+	if self.sprite.OnStatusUpdated then
+		self.sprite:OnStatusUpdated(self)
+	end
 end
 
 function Part:Reset()
-	self:func_reset()
+	local f = self.script.Reset
+	if f then f(self) end
+end
+
+function Part:Event_PointerClick(evtData)
+	Debug.Log('OnPointerClick ' .. self.type.internalName)
 end
 
 return Part

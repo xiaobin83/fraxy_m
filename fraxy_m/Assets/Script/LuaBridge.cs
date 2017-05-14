@@ -37,6 +37,17 @@ public class LuaBridge : MonoBehaviour
 		return GameObject.Instantiate<GameObject>(obj);
 	}
 
+	const float kCollectDuration = 15f;
+	float collectTime = 0;
+	void Update()
+	{
+		if (Time.realtimeSinceStartup > collectTime)
+		{
+			lua.LuaFunction.CollectActionPool();
+			collectTime = Time.realtimeSinceStartup + kCollectDuration;
+		}
+	}
+
 	static Dictionary<string, Type> cachedTypes = new Dictionary<string, Type>();
 
 	[lua.LuaTypeLoader]

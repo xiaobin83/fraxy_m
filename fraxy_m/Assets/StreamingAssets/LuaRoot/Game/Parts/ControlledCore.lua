@@ -37,7 +37,8 @@ function CC.Detach(part)
 end
 
 function CC.Start(part)
-	
+	-- check parts
+
 end
 
 function CC.Stop(part)

@@ -4,10 +4,25 @@ local UI = {}
 
 function UI:Awake()
 	self.funcList = Bridge.FindLBT(self, 'FuncList')
+	self.equipTree = Bridge.FindLBT(self, 'EquipTree')
+	self.insepctor = Bridge.FindLBT(self, 'Inspector')
 end
 
 function UI:AddFunc(title, func)
 	self.funcList:Add({title, func})
 end
+
+function UI:SetRootPart(part)
+	return self.equipTree:AddNode(part)
+end
+
+function UI:AttachPart(part, node)
+	self.equipTree:AddNode(part, node)
+end
+
+function UI:GetSelectedPartNode()
+	return self.equipTree:GetSelectedNode()
+end
+
 
 return UI

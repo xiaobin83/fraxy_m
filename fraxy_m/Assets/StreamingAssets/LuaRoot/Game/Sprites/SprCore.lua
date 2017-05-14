@@ -1,14 +1,13 @@
-local Animator = csharp.checked_import('UnityEngine.Animator')
+local Global = require 'Game/Global'
 
 local SprCore = {}
 
-
 function SprCore:Awake()
-	self.boostAnimator = self:FindGameObject('boost'):GetComponent(Animator)
+	self.boostAnimator = self:GetComponentInChildren(Global.Animator)
 end
 
 function SprCore:OnStatusUpdated(part)
-	self.boostAnimator:SetFloat('accel', part.var.accel)
+	-- self.boostAnimator:SetFloat('power', part.var.accel)
 end
 
 return SprCore

@@ -1,12 +1,18 @@
+local Boost = require 'Game/Parts/Boost'
 local Core = {}
 
-function Core:SetTarget(droid)
 
+function Core:Attach(part)
 end
 
-function Core:Step(part)
-	-- local pos = part:GetPosition()
-	-- local bounds = part:GetBounds()
+function Core:Start(part)
+	local boostParts = {}
+	part:Traverse(function(p)
+		local isBoost, type = Boost.Check(p)
+		if isBoost then
+			boostParts[type] = p
+		end
+	end)
 end
 
 return Core

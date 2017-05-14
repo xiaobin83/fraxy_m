@@ -1,29 +1,23 @@
+local LuaTreeView = csharp.checked_import('LuaTreeView')
+
 local EquipTreeView = {}
 
 function EquipTreeView:Awake()
-	EquipTreeView.current = self
+	self.treeView = self:GetComponent(LuaTreeView)
 end
 
-function EquipTreeView:OnDestroy()
-	EquipTreeView.current = nil
+function EquipTreeView:AddNode(part, parent)
+	part.node = self.treeView:Add(part.name, part, parent)
 end
 
-
-local function get_c()
-	local c = EquipTreeView.current
-	if not c then error('EquipTreeView.current is nil') end
-	return c
-end
-
-function EquipTreeView.Add(part, parent)
+function EquipTreeView:RemoveNode(part)
 	local c = get_c()
-	part.node = c:Add(part.name, part, parent)
-end
-
-function EquipTreeView.Remove(part)
-	local c = get_c()
-	c:Remove(part.node)
+	self.treeView:Remove(part.node)
 	part.node = nil
+end
+
+function EquipTreeView:GetSelectedNode()
+	return self.treeView.selected
 end
 
 return EquipTreeView

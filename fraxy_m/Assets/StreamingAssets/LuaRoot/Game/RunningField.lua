@@ -13,38 +13,29 @@ local R = {}
 function R:Awake()
 	self.mainCamera = Bridge.FindLBT(self, 'MainCamera')
 	self.UI = Bridge.FindLBT(self, 'UI')
-	Global.RunningField = self	
+	Global.RunningField = self
 end
 
 function R:Start()
 	self.UI:AddFunc(
 		"New Part",
 		function()
-			if not self.dorid then
-				local part = Droid:NewPart('controlledCore')
-				self:SetDroid(Droid:Build({part}))
+			if not self.droid then
+				local part = Droid:NewPart('ControlledCore')
+				self:SetDroid(part)
+			else
+				local node = self.UI:GetSelectedPartNode()
+				if node then
+					local part = Droid:NewPart('Deco_01')
+					self:Attach(part, node)
+				else
+					-- select a part
+				end
 			end
 		end)
 end
 
-local function DestroyGameObject(bt, delay)
-	if delay then
-		GameObject.Destroy(tbl.gameObject, delay)
-	else
-		GameObject.Destroy(tbl.gameObject)
-	end
-end
 
-local function NewGameObject(name, script)
-	local go = GameObject(name or 'GameObject')
-	local t = Bridge.AddScript(go, script)
-	t.Destroy = DestroyGameObject
-	return t
-end
-
-function R:NewPart(name)
-	return NewGameObject(name, 'Game/PartBehaviour')
-end
 
 function R:NewSprite(spriteName)
 	local go = Bridge.LoadSprite(spriteName)
@@ -53,16 +44,24 @@ function R:NewSprite(spriteName)
 	return t
 end
 
-function R:SetDroid(droid)
+function R:SetDroid(part)
 	if self.droid then
 		self.droid:Destroy()
 	end
-	if droid then
-		self.droid = droid
-		self.mainCamera:SetTarget(droid)
-		droid.transform:SetParent(self.transform)
-		droid:Reset()
+	if part then
+		self.droid = part
+		self.mainCamera:SetTarget(part)
+		part.transform:SetParent(self.transform)
+		part:Reset()
+		self.UI:SetRootPart(part)
 	end
+end
+
+function R:Attach(part, node)
+	local parent = node.item
+	part.gameObject.transform:SetParent(parent.gameObject.transform, false)
+	parent.subparts[#parent.subparts+1] = part
+	self.UI:AttachPart(part, node)
 end
 
 function R:Reset()

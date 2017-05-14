@@ -1,7 +1,7 @@
 local T = {}
 
 
-local function Translate(t, k)
+local function Translate(k)
 	return k
 end
 

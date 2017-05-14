@@ -1,9 +1,13 @@
-local Bridge = {}
+local Global = require 'Game/Global'
+
 local LuaBridge = csharp.checked_import('LuaBridge')
 local LuaBehaviour = csharp.checked_import('lua.LuaBehaviour')
-local Input = require('Input')
-local Timer = require('Timer')
-local Debug = require('Debug')
+local Input = require 'Input'
+local Timer = require 'Timer'
+local Debug = require 'Debug'
+local GameObject = Global.GameObject
+
+local Bridge = {}
 
 local UpdateInputPerSecond
 
@@ -48,6 +52,21 @@ function Bridge.AddScript(obj, scriptName)
 	local lb = obj:AddComponent(LuaBehaviour)
 	lb:LoadScript(scriptName)
 	return lb:GetBehaviourTable()
+end
+
+local function DestroyGameObject(bt, delay)
+	if delay then
+		GameObject.Destroy(tbl.gameObject, delay)
+	else
+		GameObject.Destroy(tbl.gameObject)
+	end
+end
+
+function Bridge.NewGameObject(name, script)
+	local go = GameObject(name or 'GameObject')
+	local t = Bridge.AddScript(go, script)
+	t.Destroy = DestroyGameObject
+	return t
 end
 
 return Bridge
