@@ -1,4 +1,5 @@
-local GameObject = csharp.checked_import('UnityEngine.GameObject')
+local UnityEngine = require 'UnityEngine'
+local GameObject = UnityEngine.GameObject
 local Console = {}
 
 function Console.AddText(name, updateFunction)

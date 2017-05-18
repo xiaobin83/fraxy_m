@@ -1,11 +1,11 @@
 
-local Global = require 'Game/Global'
+local UnityEngine = require 'UnityEngine'
 local FuncBtn = {}
 
 
 function FuncBtn:Awake()
-	self.text = self:FindGameObject('Text'):GetComponent(Global.UI.Text)
-	local btn = self:GetComponent(Global.UI.Button)
+	self.text = self:FindGameObject('Text'):GetComponent(UnityEngine.UI.Text)
+	local btn = self:GetComponent(UnityEngine.UI.Button)
 	btn.onClick:AddListener(function()
 		self:OnClick()
 	end)

@@ -2,7 +2,7 @@ local Global = require 'Game/Global'
 local SprBoost = {}
 
 function SprBoost:Awake()
-	self.boostAnimator = self:GetComponentInChildren(Global.Animator)
+	self.boostAnimator = self:GetComponentInChildren(UnityEngine.Animator)
 end
 
 function SprBoost:OnStatusUpdated(part)

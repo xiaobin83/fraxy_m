@@ -37,8 +37,7 @@ namespace lua
 		{
 			var isIndexingClassObject = false;
 			var top = Api.lua_gettop(L);
-			Api.lua_getmetatable(L, 1);
-			if (Api.lua_istable(L, -1))
+			if (Api.lua_getmetatable(L, 1) != 0)
 			{
 				Api.lua_rawgeti(L, -1, 1);
 				isIndexingClassObject = Api.lua_toboolean(L, -1);
@@ -190,6 +189,26 @@ namespace lua
 			{
 				return Lua.GetMember(L, thisObject, typeObject, Api.lua_tostring(L, 2));
 			}
+			else if (Api.lua_istable(L, 2))
+			{
+				var host = Lua.CheckHost(L);
+				using (var p = LuaTable.MakeRefTo(host, 2))
+				{
+					var isGettingTypeObject = (bool)host.isIndexingTypeObject.Invoke1(p);
+					if (isGettingTypeObject)
+					{
+						Lua.PushObjectInternal(L, typeObject);
+						return 1;
+					}
+					using (var ret = host.testPrivillage.InvokeMultiRet(p))
+					{
+						var name = (string)ret[1];
+						var hasPrivatePrivillage = (bool)ret[2];
+						return Lua.GetMember(L, thisObject, typeObject, name, hasPrivatePrivillage: hasPrivatePrivillage);
+					}
+			
+				}
+			}
 			else
 			{
 				return Lua.IndexObjectInternal(L, thisObject, typeObject, new object[] { Lua.ValueAtInternal(L, 2) });
@@ -236,22 +255,7 @@ namespace lua
 					var array = (System.Array)thisObject;
 					var value = Lua.ValueAtInternal(L, 3);
 					var index = (int)Api.lua_tointeger(L, 2);
-					var elemType = typeObject.GetElementType();
-					object converted;
-					IDisposable disposable;
-					if (Lua.TryConvertTo(elemType, value, out converted, out disposable))
-					{
-						array.SetValue(converted, index);
-						if (disposable != null)
-						{
-							disposable.Dispose();
-						}
-					}
-					else
-					{
-						converted = System.Convert.ChangeType(value, elemType);
-						array.SetValue(converted, index);
-					}
+					array.SetValue(Lua.ConvertTo(value, typeObject.GetElementType()), index);
 				}
 				else
 				{
@@ -260,7 +264,20 @@ namespace lua
 			}
 			else if (Api.lua_isstring(L, 2))
 			{
-				Lua.SetMember(L, thisObject, typeObject, Api.lua_tostring(L, 2), Lua.ValueAtInternal(L, 3));
+				Lua.SetMember(L, thisObject, typeObject, Api.lua_tostring(L, 2), Lua.ValueAtInternal(L, 3), hasPrivatePrivillage: false);
+			}
+			else if (Api.lua_istable(L, 2))
+			{
+				var host = Lua.CheckHost(L);
+				using (var p = LuaTable.MakeRefTo(host, 2))
+				{
+					using (var ret = host.testPrivillage.InvokeMultiRet(p))
+					{
+						var name = (string)ret[1];
+						var hasPrivillage = (bool)ret[2];
+						Lua.SetMember(L, thisObject, typeObject, name, Lua.ValueAtInternal(L, 3), hasPrivatePrivillage: true);
+					}
+				}
 			}
 			else
 			{
@@ -328,16 +345,26 @@ namespace lua
 
 		static int MetaBinaryOpFunctionInternal(lua_State L)
 		{
-			var objectArg = Api.luaL_testudata(L, 1, Lua.objectMetaTable); // test first one
-			if (objectArg == IntPtr.Zero)
+			if (Api.lua_rawequal(L, 1, 2))
 			{
-				objectArg = Api.luaL_testudata(L, 2, Lua.objectMetaTable);
-				if (objectArg == IntPtr.Zero)
-				{
-					Lua.Assert(false, string.Format("Binary op {0} called on unexpected values.", Api.lua_tostring(L, Api.lua_upvalueindex(1))));
-				}
+				Api.lua_pushboolean(L, true);
+				return 1;
+			}
+
+			var objectArg = Api.luaL_testudata(L, 1, Lua.objectMetaTable); // test first one
+			var objectArg2 = Api.luaL_testudata(L, 2, Lua.objectMetaTable);
+			if (objectArg == IntPtr.Zero || objectArg2 == IntPtr.Zero)
+			{
+				Lua.Assert(false, string.Format("Binary op {0} called on unexpected values.", Api.lua_tostring(L, Api.lua_upvalueindex(1))));
 			}
 			var obj = Lua.UdataToObject(objectArg);
+			var obj2 = Lua.UdataToObject(objectArg2);
+			if (obj == obj2)
+			{
+				Api.lua_pushboolean(L, true);
+				return 1;
+			}
+
 			var type = obj.GetType();
 
 			// upvalue 1 --> isInvokingFromClass

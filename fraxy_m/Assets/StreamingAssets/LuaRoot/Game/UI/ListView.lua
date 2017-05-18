@@ -1,6 +1,6 @@
 local Bridge = require 'Game/Bridge'
-local Global = require 'Game/Global'
-local GameObject = Global.GameObject
+local UnityEngine = require 'UnityEngine'
+local GameObject = UnityEngine.GameObject
 
 local ListView = {}
 

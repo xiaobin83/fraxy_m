@@ -1,12 +1,7 @@
 local Global = require 'Game/Global'
-
-local import = csharp.checked_import
-local Camera = import('UnityEngine.Camera')
-local GameObject = Global.GameObject
-local Resources = import('UnityEngine.Resources')
+local UnityEngine = require 'UnityEngine'
 local Droid = require 'Game/Droid'
 local Bridge = require 'Game/Bridge'
-
 
 local R = {}
 
@@ -14,6 +9,10 @@ function R:Awake()
 	self.mainCamera = Bridge.FindLBT(self, 'MainCamera')
 	self.UI = Bridge.FindLBT(self, 'UI')
 	Global.RunningField = self
+end
+
+function R:OnDestroy()
+	Global.RunningField = nil
 end
 
 function R:Start()

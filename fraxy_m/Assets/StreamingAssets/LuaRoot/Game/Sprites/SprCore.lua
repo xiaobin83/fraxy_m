@@ -1,9 +1,9 @@
-local Global = require 'Game/Global'
+local UnityEngine = require 'UnityEngine'
 
 local SprCore = {}
 
 function SprCore:Awake()
-	self.boostAnimator = self:GetComponentInChildren(Global.Animator)
+	self.boostAnimator = self:GetComponentInChildren(UnityEngine.Animator)
 end
 
 function SprCore:OnStatusUpdated(part)

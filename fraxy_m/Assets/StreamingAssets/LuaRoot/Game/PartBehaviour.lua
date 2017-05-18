@@ -1,10 +1,16 @@
 local Part = {}
-local Global = require("Game/Global")
+local Global = require 'Game/Global'
+local UnityEngine = require 'UnityEngine'
 local Debug = require 'Debug'
+local PartType = require 'Game/PartType'
+local T = require 'Text'
+local Prop = require 'Game/UI/Prop'
 
 function Part:Awake()
 	self.var = {}
 	self.subparts = {}
+	self.props = {}
+	self.data = {}
 end
 
 function Part:CreateSprite()
@@ -22,11 +28,50 @@ function Part:CreateScript()
 end
 
 function Part:SetType(type)
-	if self.func_stop then
-		self:func_stop()
-		self:func_detach()
+
+	if self.script then
+		if self.script.Stop then
+			self.script.Stop(self)
+		end
+		if self.script.Detach then
+			self.script.Detach(self)
+		end
 	end
-	self.type = type
+
+	self.data.name = self.data.name or type.name
+
+	self.props = {}
+	self.props.name = Prop.New { 
+		get = function()
+			return self.data.name
+		end,
+		set = function(value)
+			self.data.name = value
+		end,
+		inspector = {
+			name = 'Input',
+			title = T('PartName'),
+			placeholder = self.data.name,
+			content_type = 'Alphanumeric'
+		}
+	}
+	self.props.type = Prop.New {
+		get = function()
+			return self.data.value
+		end,
+		set = function(value)
+			self.data.type = value
+		end,
+		inspector = {
+			name = 'DropDown',
+			title = 'Type',
+			list = PartType,
+			selected = self.data.type.name
+		}
+	}
+	
+	
+	
 	self.script = type.script
 	self:CreateSprite()
 	if self.script.Attach then

@@ -1,11 +1,10 @@
-local Global = require 'Game/Global'
-
 local LuaBridge = csharp.checked_import('LuaBridge')
 local LuaBehaviour = csharp.checked_import('lua.LuaBehaviour')
+local UnityEngine = require 'UnityEngine'
 local Input = require 'Input'
 local Timer = require 'Timer'
 local Debug = require 'Debug'
-local GameObject = Global.GameObject
+local GameObject = UnityEngine.GameObject
 
 local Bridge = {}
 

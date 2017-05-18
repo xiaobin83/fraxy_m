@@ -149,7 +149,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Content: {fileID: 224000012586531094}
-  m_Indent: 10
+  m_Indent: 20
   m_PrefabEntry: {fileID: 1000011433687258, guid: 77fe311d8458c2b489f3886c261f9e80,
     type: 2}
   m_EnableDragAndDrop: 0
@@ -512,7 +512,7 @@ RectTransform:
   m_RootOrder: 0
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 20}
+  m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 1}
 --- !u!224 &224000014168223604

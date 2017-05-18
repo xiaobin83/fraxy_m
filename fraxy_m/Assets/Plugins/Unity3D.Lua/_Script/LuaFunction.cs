@@ -25,6 +25,7 @@ using UnityEngine.Events;
 using System;
 using AOT;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace lua
 {
@@ -33,16 +34,6 @@ namespace lua
 		Lua L_;
 		int funcRef = Api.LUA_NOREF;
 		int refCount = 1;
-
-		public static implicit operator Action(LuaFunction f)
-		{
-			return ToAction(f);
-		}
-
-		public static implicit operator UnityAction(LuaFunction f)
-		{
-			return ToUnityAction(f);
-		}
 
 		class ActionPool
 		{
@@ -99,6 +90,98 @@ namespace lua
 				{
 					return (arg1, arg2, arg3) => func.Invoke(arg1, arg2, arg3);
 				}
+
+				void GenericAction<T>(T arg)
+				{
+					func.Invoke(arg);
+				}
+
+				void GenericAction<T1, T2>(T1 arg1, T2 arg2)
+				{
+					func.Invoke(arg1, arg2);
+				}
+
+				void GenericAction<T1, T2, T3>(T1 arg1, T2 arg2, T3 arg3)
+				{
+					func.Invoke(arg1, arg2, arg3);
+				}
+
+				ReturnType GenericFunc<ReturnType>()
+				{
+					return (ReturnType)Lua.ConvertTo(func.Invoke1(), typeof(ReturnType));
+				}
+				ReturnType GenericFunc<T1, ReturnType>(T1 arg1)
+				{
+					return (ReturnType)Lua.ConvertTo(func.Invoke1(arg1), typeof(ReturnType));
+				}
+
+				ReturnType GenericFunc<T1, T2, ReturnType>(T1 arg1, T2 arg2)
+				{
+					return (ReturnType)Lua.ConvertTo(func.Invoke1(arg1, arg2), typeof(ReturnType));
+				}
+
+				ReturnType GenericFunc<T1, T2, T3, ReturnType>(T1 arg1, T2 arg2, T3 arg3)
+				{
+					return (ReturnType)Lua.ConvertTo(func.Invoke1(arg1, arg2, arg3), typeof(ReturnType));
+				}
+
+				static System.Reflection.MemberInfo[] genericActions_;
+				static System.Reflection.MemberInfo[] genericActions
+				{
+					get
+					{
+						if (genericActions_ == null)
+						{
+							genericActions_ = typeof(ActionSlot).GetMember("GenericAction", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+						}
+						return genericActions_;
+					}
+				}
+
+				static System.Reflection.MemberInfo[] genericFuncs_;
+				static System.Reflection.MemberInfo[] genericFuncs
+				{
+					get
+					{
+						if (genericFuncs_ == null)
+						{
+							genericFuncs_ = typeof(ActionSlot).GetMember("GenericFunc", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+						}
+						return genericFuncs_;
+					}
+				}
+
+				static Dictionary<Type, System.Reflection.MethodInfo> cachedDelegateTypes = new Dictionary<Type, System.Reflection.MethodInfo>();
+				static List<Type> types = new List<Type>();
+				public System.Delegate GetDelegate(Type delegateType)
+				{
+					System.Reflection.MethodInfo mi = null;
+					if (!cachedDelegateTypes.TryGetValue(delegateType, out mi))
+					{
+						var invokeMi = delegateType.GetMethod("Invoke");
+						var actionOrFunc = invokeMi.ReturnType == typeof(void);
+						types.Clear();
+						types.AddRange(invokeMi.GetParameters().Select((p) => p.ParameterType));
+						if (false == actionOrFunc)
+						{
+							types.Add(invokeMi.ReturnType);
+						}
+						var members = actionOrFunc ? genericActions : genericFuncs;
+						for (int i = 0; i < members.Length; ++i)
+						{
+							var m = (System.Reflection.MethodInfo)members[i];
+							var gps = m.GetGenericArguments();
+							if (gps.Length == types.Count)
+							{
+								mi = m.MakeGenericMethod(types.ToArray());
+								break;
+							}
+						}
+						// cached even null
+						cachedDelegateTypes.Add(delegateType, mi);
+					}
+					return System.Delegate.CreateDelegate(delegateType, this, mi);
+				}
 			}
 
 			public static Action ToAction(LuaFunction f)
@@ -126,6 +209,10 @@ namespace lua
 				return (new ActionSlot(f)).GetAction<T1, T2, T3>();
 			}
 
+			public static System.Delegate ToDelegate(LuaFunction f, Type delegateType)
+			{
+				return (new ActionSlot(f)).GetDelegate(delegateType);
+			}
 
 			public static void Collect()
 			{
@@ -168,6 +255,11 @@ namespace lua
 		public static Action<T1, T2, T3> ToAction<T1, T2, T3>(LuaFunction f)
 		{
 			return ActionPool.ToAction<T1, T2, T3>(f);
+		}
+
+		public static System.Delegate ToDelegate(Type type, LuaFunction f)
+		{
+			return ActionPool.ToDelegate(f, type);
 		}
 
 		public void Dispose()
@@ -288,6 +380,8 @@ namespace lua
 				throw e;
 			}
 		}
+
+
 
 		public static LuaFunction MakeRefTo(Lua L, int idx)
 		{

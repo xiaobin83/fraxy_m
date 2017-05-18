@@ -253,7 +253,6 @@ namespace ui
 		protected virtual void OnPointerEnter(PointerEventData evtData, Node target)
 		{
 			hitting_ = target;
-			Debug.Log(target.name);
 		}
 
 		protected virtual void OnPointerExit(PointerEventData evtData, Node target)

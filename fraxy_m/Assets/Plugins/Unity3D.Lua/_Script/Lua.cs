@@ -184,15 +184,55 @@ namespace lua
 			"end";
 		LuaFunction hexDump;
 
+		const string kLuaStub_Privillage =
+			"local private_mark_meta = {}\n" +
+			"local exact_mark_meta = {}\n" +
+			"local mark_private = function()\n" +
+			"  return setmetatable({}, private_mark_meta)\n" +
+			"end\n" +
+			"local mark_exact = function(...)\n" +
+			"  return setmetatable({...}, exact_mark_meta)\n" +
+			"end\n" +
+			"local mark_generic = function(...)\n" +
+			"  return setmetatable({...}, generic_mark_meta)\n" +
+			"end\n" +
+			"local test_privillage = function(attr, testOnlyPrivate)\n" +
+			"  if #attr < 2 then error('incorrect privillage') end\n" +
+			"  testOnlyPrivate = testOnlyPrivate or 1\n" +
+			"  local name = attr[#attr]\n" +
+			"  local private = false\n" +
+			"  local exact\n" +
+			"  local generic\n" +
+			"  for i = 1, #attr - 1 do\n" +
+			"    local v = attr[i]\n" +
+			"    local meta = getmetatable(v)\n" +
+			"    if meta == private_mark_meta then\n" +
+			"      private = true\n" +
+			"    elseif (testOnlyPrivate == 0) and (meta == exact_mark_meta or meta == generic_mark_meta) then\n" +
+			"      local types = csharp.make_array('System.Type', #v)\n" +
+			"      for j, t in ipairs(v) do\n" +
+			"        types[j-1] = csharp.get_type(t)\n" +
+			"      end\n" +
+			"      if meta == exact_mark_meta then\n" +
+			"        exact = types\n" +
+			"      else\n" +
+			"        generic = types\n" +
+			"      end\n" +
+			"    end\n" +
+			"  end\n" +
+			"  return name, private, exact, generic\n" +
+			"end\n" +
+			"return mark_private, mark_exact, mark_generic, test_privillage";
+		internal LuaFunction testPrivillage;
+
 		const string kLuaStub_ErrorObject =
 			"local error_meta = { __tostring = function(e) return e.message end }\n" +
-			"local table_pack, setmetatable, getmetatable, assert = table.pack, setmetatable, getmetatable, assert\n" +
+			"local table_pack, setmetatable, getmetatable = table.pack, setmetatable, getmetatable\n" +
 			"return function(message) -- push error object\n" + 
 			"  local errObj = { message = message }\n" +
-			"  setmetatable(errObj, error_meta)\n" +
-			"  return errObj\n" +
+			"  return setmetatable(errObj, error_meta)\n" +
 			"end,\n" +
-			"function(...) -- check error object, assert if got error, returns all value got if no error\n" +
+			"function(...) -- check error object, error() if got error, returns all value got if no error\n" +
 			"  local r = table_pack(...)\n" + 
 			"  if #r > 0 then\n" +
 			"    local e = r[1] \n" +
@@ -200,10 +240,21 @@ namespace lua
 			"    if m == error_meta then error('\\ninvoking native function failed: ' .. e.message) end\n" +
 			"  end\n" +
 			"  return ... -- nothing to check\n" +
+			"end,\n" +
+			"function(...) -- test error object, return isErrorObject and values got from parameters\n" +
+			"  local r = table_pack(...)\n" +
+			"  if #r > 0 then\n" + 
+			"    local e = r[1]\n" +
+			"    local m = getmetatable(e)\n" + 
+			"    if m == error_meta then return true, ... end\n" + 
+			"  end\n" +
+			"  return false, ...\n" +
 			"end";
+
 
 		LuaFunction pushError;
 		LuaFunction checkError;
+		LuaFunction testError; // todo, replace checkError with testError
 
 		const string kLuaStub_Bytes =
 			"local hex_dump = csharp.hex_dump\n" +
@@ -234,11 +285,126 @@ namespace lua
 		const string kLuaStub_CheckedImport = 
 			"function(lib) return csharp.check_error(csharp.import(lib)) end";
 
-				// temp	solution for bp in lua
+		const string kLuaStub_TypeOf = 
+			"local type_of_mark = {}\n" +  // use table to avoid check string for every indexing in C#
+			"return function(obj) -- typeof\n" +
+			"  return obj[type_of_mark]\n" +
+			"end,\n" +
+			"function(mark) return mark == type_of_mark end -- isIndexingTypeObject";
+		internal LuaFunction isIndexingTypeObject;
+
+		// temp	solution for bp in lua
 		[MonoPInvokeCallback(typeof(Api.lua_CFunction))]
 		static int _Break(IntPtr L)
 		{
 			return 0;
+		}
+
+		[MonoPInvokeCallback(typeof(Api.lua_CFunction))]
+		static int Print(IntPtr L)
+		{
+			Config.Log(Api.lua_tostring(L, 1));
+			return 0;
+		}
+
+		[MonoPInvokeCallback(typeof(Api.lua_CFunction))]
+		static int ToEnum(IntPtr L)
+		{
+			var enumType = (Type)ObjectAtInternal(L, 1);
+			if (enumType == null || !enumType.IsEnum)
+			{
+				PushErrorObject(L, "expected enum type at argument 1");
+				return 1;
+			}
+			if (Api.lua_isinteger(L, 2))
+			{
+				var value = Api.lua_tointeger(L, 2);
+				try
+				{
+					PushObjectInternal(L, System.Enum.ToObject(enumType, value));
+				}
+				catch (Exception e)
+				{
+					PushErrorObject(L, e.Message);
+				}
+			}
+			else
+			{
+				PushErrorObject(L, "expected integer at argumetn 2");
+			}
+			return 1;
+		}
+
+		[MonoPInvokeCallback(typeof(Api.lua_CFunction))]
+		static int GetTypeFromString(IntPtr L)
+		{
+			if (Api.lua_isstring(L, 1))
+			{
+				var typeName = Api.lua_tostring(L, 1);
+				var typeObj = GetTypeFromString(typeName);
+				if (typeObj != null)
+				{
+					PushObjectInternal(L, typeObj);
+					return 1;
+				}
+			}
+			Api.lua_pushnil(L);
+			return 1;
+		}
+
+		static Type GetTypeFromString(string typeName)
+		{
+			if (typeName == "string")
+			{
+				return typeof(string);
+			}
+			else if (typeName == "int")
+			{
+				return typeof(int);
+			}
+			else if (typeName == "float")
+			{
+				return typeof(float);
+			}
+			else if (typeName == "double")
+			{
+				return typeof(double);
+			}
+			else if (typeName == "long")
+			{
+				return typeof(long);
+			}
+			else if (typeName == "byte")
+			{
+				return typeof(byte);
+			}
+			else if (typeName == "char")
+			{
+				return typeof(char);
+			}
+			else if (typeName == "uint")
+			{
+				return typeof(uint);
+			}
+			else if (typeName == "ulong")
+			{
+				return typeof(ulong);
+			}
+			else if (typeName == "object")
+			{
+				return typeof(object);
+			}
+            else
+			{
+				try
+				{
+					return loadType(typeName);
+				}
+				catch
+				{
+					return null;
+				}
+			}
 		}
 
 		[MonoPInvokeCallback(typeof(Api.lua_CFunction))]
@@ -248,54 +414,7 @@ namespace lua
 			if (Api.lua_isstring(L, 1))
 			{
 				var typeName = Api.lua_tostring(L, 1);
-				if (typeName == "string")
-				{
-					typeObj = typeof(string);
-				}
-				else if (typeName == "int")
-				{
-					typeObj = typeof(int);
-				}
-				else if (typeName == "float")
-				{
-					typeObj = typeof(float);
-				}
-				else if (typeName == "double")
-				{
-					typeObj = typeof(double);
-				}
-				else if (typeName == "long")
-				{
-					typeObj = typeof(long);
-				}
-				else if (typeName == "byte")
-				{
-					typeObj = typeof(byte);
-				}
-				else if (typeName == "char")
-				{
-					typeObj = typeof(char);
-				}
-				else if (typeName == "uint")
-				{
-					typeObj = typeof(uint);
-				}
-				else if (typeName == "ulong")
-				{
-					typeObj = typeof(ulong);
-				}
-				else
-				{
-					try
-					{
-						typeObj = loadType(typeName);
-					}
-					catch (Exception e)
-					{
-						PushErrorObject(L, e.Message);
-						return 1;
-					}
-				}
+				typeObj = GetTypeFromString(typeName);
 				if (typeObj == null)
 				{
 					PushErrorObject(L, string.Format("MakeArray error, typeName = '{0}' at argument 1 not found", typeName));
@@ -351,14 +470,42 @@ namespace lua
 			// Helpers
 			try
 			{
-				// csharp.test_error && csharp.push_error
-				DoString(kLuaStub_ErrorObject, 2, "error_object");
-				// -1 check, -2 push
-				checkError = LuaFunction.MakeRefTo(this, -1);
-				pushError = LuaFunction.MakeRefTo(this, -2);
-				// also set to csharp table
-				csharp["check_error"] = checkError;
+				DoString(kLuaStub_Privillage, 4, "privillage");
+				// "return mark_private, mark_exact, mark_generic, test_privillage";
+				testPrivillage = LuaFunction.MakeRefTo(this, -1);
+				var markGeneric = LuaFunction.MakeRefTo(this, -2);
+				var markExact = LuaFunction.MakeRefTo(this, -3);
+				var markPrivate = LuaFunction.MakeRefTo(this, -4);
+
+				csharp["p_private"] = markPrivate;
+				markPrivate.Dispose();
+
+				csharp["p_exact"] = markExact;
+				markExact.Dispose();
+
+				csharp["p_generic"] = markGeneric;
+				markGeneric.Dispose();
+
+				Api.lua_pop(L, 4); // pop
+
+				DoString(kLuaStub_TypeOf, 2, "typeof");
+				// -1 isIndexingTypeObject, -2 typeof
+				isIndexingTypeObject = LuaFunction.MakeRefTo(this, -1);
+				var luaTypeOf = LuaFunction.MakeRefTo(this, -2);
+				csharp["typeof"] = luaTypeOf;
+				luaTypeOf.Dispose();
 				Api.lua_pop(L, 2); // pop
+
+				// csharp.check_error && csharp.push_error
+				DoString(kLuaStub_ErrorObject, 3, "error_object");
+				// -1 test, -2 check, -3 push
+				testError = LuaFunction.MakeRefTo(this, -1);
+				checkError = LuaFunction.MakeRefTo(this, -2);
+				pushError = LuaFunction.MakeRefTo(this, -3);
+				// also set to csharp table
+				csharp["test_error"] = testError;
+				csharp["check_error"] = checkError;
+				Api.lua_pop(L, 3); // pop
 
 				// ------ BEFORE THIS LINE, ERROR OBJECET is not prepared, so all errors pushed as string
 
@@ -449,6 +596,15 @@ namespace lua
 
 			addPath.Dispose();
 			addPath = null;
+
+			testPrivillage.Dispose();
+			testPrivillage = null;
+
+			isIndexingTypeObject.Dispose();
+			isIndexingTypeObject = null;
+
+			testError.Dispose();
+			testError = null;
 
 			checkError.Dispose();
 			checkError = null;
@@ -634,7 +790,10 @@ namespace lua
 				new Api.luaL_Reg("import", Import),
 				new Api.luaL_Reg("dofile", DoFile),
 				new Api.luaL_Reg("_break", _Break),
-				new Api.luaL_Reg("make_array", MakeArray)
+				new Api.luaL_Reg("make_array", MakeArray),
+				new	Api.luaL_Reg("to_enum",	ToEnum),
+				new Api.luaL_Reg("get_type", GetTypeFromString),
+                new	Api.luaL_Reg("print", Print)
 			};
 			Api.luaL_newlib(L, regs);
 			return 1;
@@ -1260,7 +1419,8 @@ namespace lua
 				if (luaArgType == Api.LUA_TBOOLEAN) return 10;
 				return 4; // convert to bool
 			}
-			else if (type == typeof(LuaFunction) || type == typeof(System.Action) || type == typeof(UnityEngine.Events.UnityAction))
+			else if (type == typeof(LuaFunction) || type == typeof(System.Action) || type == typeof(UnityEngine.Events.UnityAction)
+				|| typeof(System.Delegate).IsAssignableFrom(type))
 			{
 				if (luaArgType == Api.LUA_TFUNCTION) return 10;
 			}
@@ -1478,19 +1638,25 @@ namespace lua
 						}
 						if (type == typeof(System.Action))
 						{
-							actualArgs.SetValue((System.Action)t, idx);
-							t.Dispose(); // unused anymore
+							actualArgs.SetValue(LuaFunction.ToAction(t), idx);
+							t.Dispose(); // retained in ToAction, unused here
 						}
 						else if (type == typeof(UnityEngine.Events.UnityAction))
 						{
-							actualArgs.SetValue((UnityEngine.Events.UnityAction)t, idx);
-							t.Dispose(); // unused anymore
+							actualArgs.SetValue(LuaFunction.ToUnityAction(t), idx);
+							t.Dispose(); // retained in ToUnityAction, unused here
 						}
-						else
+						else if (type == typeof(LuaFunction))
 						{
 							isDisposable = true;
 							actualArgs.SetValue(t, idx);
 						}
+						else // generic part
+						{
+							actualArgs.SetValue(LuaFunction.ToDelegate(type, t), idx);
+							t.Dispose(); // retained in LuaFunction.CreateDelegate, unused here
+						}
+
 					}
 					break;
 				case Api.LUA_TTHREAD:
@@ -1761,7 +1927,7 @@ namespace lua
 					Api.lua_insert(L, -2);
 					if (Api.LUA_OK != Api.lua_pcall(L, 1, 0, 0)) // do not use host.Call, or you have infinite recursive call.
 					{
-						// has error, test_error calls error() in lua script, catches here
+						// has error, check_error calls error() in lua script, catches here
 						errorMessage = Api.lua_tostring(L, -1);
 						Api.lua_pop(L, 1);
 						return true;
@@ -1834,58 +2000,99 @@ namespace lua
 
 		static MethodCache MatchMethod(IntPtr L, 
 			Type invokingType, Type type, string methodName, string mangledName, bool invokingStaticMethod,
-			ref object target, int argStart, int[] luaArgTypes)
+			ref object target, int argStart, int[] luaArgTypes,
+			bool hasPrivatePrivillage,
+			Type[] exactParamTypes, Type[] genericParamTypes,
+			bool dontCache)
 		{
 			System.Reflection.MethodBase method;
-			var members = type.GetMember(methodName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
-			var score = Int32.MinValue;
+			var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance;
+			if (hasPrivatePrivillage)
+				flags |= System.Reflection.BindingFlags.NonPublic;
+
 			System.Reflection.MethodBase selected = null;
 			System.Reflection.ParameterInfo[] parameters = null;
 			List<Exception> pendingExceptions = null;
-			foreach (var member in members)
+
+			if (exactParamTypes != null)
 			{
-				Assert(member.MemberType == System.Reflection.MemberTypes.Method, string.Format("{0} is not a Method.", methodName));
-				var m = (System.Reflection.MethodInfo)member;
-				if (m.IsStatic)
+				var mi = type.GetMethod(methodName, flags, null, exactParamTypes, null);
+				if (mi != null)
 				{
-					if (!invokingStaticMethod)
+					selected = mi;
+					parameters = selected.GetParameters();
+				}
+			}
+			else
+			{
+				var members = type.GetMember(methodName, System.Reflection.MemberTypes.Method, flags);
+				var score = Int32.MinValue;
+
+				foreach (var member in members)
+				{
+					var m = (System.Reflection.MethodInfo)member;
+					if (m.IsStatic)
 					{
-						Assert(false, string.Format("invoking static method {0} with incorrect syntax.", m.ToString()));
+						if (!invokingStaticMethod)
+						{
+							Assert(false, string.Format("invoking static method {0} with incorrect syntax.", m.ToString()));
+						}
+						target = null;
 					}
-					target = null;
-				}
-				else
-				{
-					if (invokingStaticMethod)
+					else
 					{
-						Assert(false, string.Format("invoking non-static method {0} with incorrect syntax.", m.ToString()));
+						if (invokingStaticMethod)
+						{
+							Assert(false, string.Format("invoking non-static method {0} with incorrect syntax.", m.ToString()));
+						}
 					}
-				}
-				try
-				{
-					MatchingParameters(L, argStart, m, luaArgTypes, ref score, ref selected, ref parameters);
-				}
-				catch (System.Reflection.AmbiguousMatchException e)
-				{
-					throw e;
-				}
-				catch (Exception e)
-				{
-					if (pendingExceptions == null)
-						pendingExceptions = new List<Exception>();
-					pendingExceptions.Add(e);
+					if (m.ContainsGenericParameters && genericParamTypes != null)
+					{
+						var gps = m.GetGenericArguments();
+						if (gps.Length == genericParamTypes.Length)
+						{
+							selected = m.MakeGenericMethod(genericParamTypes);
+							parameters = m.GetParameters();
+							dontCache = true;
+							break;
+						}
+					}
+					else
+					{
+						try
+						{
+							MatchingParameters(L, argStart, m, luaArgTypes, ref score, ref selected, ref parameters);
+						}
+						catch (System.Reflection.AmbiguousMatchException e)
+						{
+							throw e;
+						}
+						catch (Exception e)
+						{
+							if (pendingExceptions == null)
+								pendingExceptions = new List<Exception>();
+							pendingExceptions.Add(e);
+						}
+					}
 				}
 			}
 			method = selected;
 			if (method != null)
 			{
-				return CacheMethod(invokingType, mangledName, method, parameters);
+				if (dontCache)
+				{
+					return new MethodCache() { method = method, parameters = parameters, variadicArg = IsLastArgVariadic(parameters) };
+				}
+				else
+				{
+					return CacheMethod(invokingType, mangledName, method, parameters);
+				}
 			}
 
 			if (type != typeof(object))
 			{
 				// search into parent
-				return MatchMethod(L, invokingType, type.BaseType, methodName, mangledName, invokingStaticMethod, ref target, argStart, luaArgTypes);
+				return MatchMethod(L, invokingType, type.BaseType, methodName, mangledName, invokingStaticMethod, ref target, argStart, luaArgTypes, hasPrivatePrivillage, exactParamTypes, genericParamTypes, dontCache);
 			}
 			else
 			{
@@ -1912,11 +2119,31 @@ namespace lua
 			var obj = ObjectAtInternal(L, Api.lua_upvalueindex(2));
 			Assert(obj != null, "invoking target not found at upvalueindex(2)");
 			string methodName;
-			if (!Api.luaL_teststring_strict(L, Api.lua_upvalueindex(3), out methodName))
+			var hasPriviatePrivillage = false;
+			Type[] exactTypes = null;
+			Type[] genericTypes = null;
+			var host = CheckHost(L);
+			if (Api.lua_istable(L, Api.lua_upvalueindex(3)))
+			{
+				using (var p = LuaTable.MakeRefTo(host, Api.lua_upvalueindex(3)))
+				{
+					var testOnlyPrivate = 0;
+					using (var privillageTable = host.testPrivillage.InvokeMultiRet(p, testOnlyPrivate))
+					{
+						methodName = (string)privillageTable[1];
+						hasPriviatePrivillage = (bool)privillageTable[2];
+						exactTypes = (Type[])privillageTable[3];
+						genericTypes = (Type[])privillageTable[4];
+					}
+				}
+			}
+			else if (!Api.luaL_teststring_strict(L, Api.lua_upvalueindex(3), out methodName))
 			{
 				throw new ArgumentException("expected string", "methodName (upvalueindex(3))");
 			}
 
+			var dontCache = exactTypes != null || genericTypes != null;
+			
 			int[] luaArgTypes = luaArgTypes_NoArgs;
 			var argStart = 1;
 			var numArgs = Api.lua_gettop(L);
@@ -1986,13 +2213,14 @@ namespace lua
 				type = obj.GetType();
 			}
 
-			var mangledName = CheckHost(L).Mangle(methodName, luaArgTypes, invokingStaticMethod, argStart);
-
-			var mc = GetMethodFromCache(type, mangledName);
+			var mangledName = host.Mangle(methodName, luaArgTypes, invokingStaticMethod, argStart);
+			MethodCache mc = null;
+			if (!dontCache)
+				mc = GetMethodFromCache(type, mangledName);
 			if (mc == null)
 			{
 				// match method	throws not matching exception
-				mc = MatchMethod(L, type, type, methodName, mangledName, invokingStaticMethod, ref target, argStart, luaArgTypes);
+				mc = MatchMethod(L, type, type, methodName, mangledName, invokingStaticMethod, ref target, argStart, luaArgTypes, hasPriviatePrivillage, exactTypes, genericTypes, dontCache);
 			}
 
 			var top = Api.lua_gettop(L);
@@ -2085,7 +2313,7 @@ namespace lua
 			{
 				throw new Exception(string.Format("Cannot import type {0}", typename));
 			}
-			if (PushObjectInternal(L, type, classMetaTable) == 1) // typhe object in ImportInternal_ is cached by luaL_requiref
+			if (PushObjectInternal(L, type, classMetaTable) == 1) // type object in ImportInternal_ is cached by luaL_requiref
 			{
 				Api.lua_getmetatable(L, -1); // append info in metatable
 
@@ -2220,6 +2448,10 @@ namespace lua
 				var t = (LuaTable)value;
 				t.Push(L);
 			}
+			else if (type.IsEnum)
+			{
+				Api.lua_pushinteger(L, (int)value);
+			}
 			else if (type == typeof(LuaThread))
 			{
 				var th = (LuaThread)value;
@@ -2267,13 +2499,15 @@ namespace lua
 			return false;
 		}
 
-		internal static int GetMember(IntPtr L, object obj, Type objType, string memberName)
+		internal static int GetMember(IntPtr L, object obj, Type objType, string memberName, bool hasPrivatePrivillage = false)
 		{
 			System.Reflection.MemberInfo member = null;
 			var hasCachedMember = GetMemberFromCache(objType, memberName, out member);
 			if (!hasCachedMember)
 			{
-				var members = objType.GetMember(memberName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
+				var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance;
+				if (hasPrivatePrivillage) flags |= System.Reflection.BindingFlags.NonPublic;
+				var members = objType.GetMember(memberName, flags);
 				if (members.Length > 0)
 				{
 					member = members[0];
@@ -2292,7 +2526,14 @@ namespace lua
 			else if (member.MemberType == System.Reflection.MemberTypes.Field)
 			{
 				var field = (System.Reflection.FieldInfo)member;
-				PushValueInternal(L, field.GetValue(obj));
+				if (field.FieldType.IsEnum)
+				{
+					PushValueInternal(L, (int)field.GetValue(obj));
+				}
+				else
+				{
+					PushValueInternal(L, field.GetValue(obj));
+				}
 				return 1;
 			}
 			else if (member.MemberType == System.Reflection.MemberTypes.Property)
@@ -2300,7 +2541,14 @@ namespace lua
 				var prop = (System.Reflection.PropertyInfo)member;
 				try
 				{
-					PushValueInternal(L, prop.GetValue(obj, null));
+					if (prop.PropertyType.IsEnum)
+					{
+						PushValueInternal(L, (int)prop.GetValue(obj, null));
+					}
+					else
+					{
+						PushValueInternal(L, prop.GetValue(obj, null));
+					}
 					return 1;
 				}
 				catch (ArgumentException ae)
@@ -2316,6 +2564,7 @@ namespace lua
 				Api.lua_pushboolean(L, isInvokingFromClass);      // upvalue 1 --> isInvokingFromClass
 				Api.lua_pushvalue(L, 1);                          // upvalue 2 --> userdata, first parameter of __index
 				Api.lua_pushvalue(L, 2);                          // upvalue 3 --> member name
+				// TODO: maybe i should	cache here, to avoid name manglings
 				Api.lua_pushcclosure(L, InvokeMethod, 3);         // return a wrapped lua_CFunction
 				return 1;
 			}
@@ -2340,8 +2589,14 @@ namespace lua
 			}
 			try
 			{
-				var value = prop.GetValue(obj, index);
-				PushValueInternal(L, value);
+				if (prop.PropertyType.IsEnum)
+				{
+					PushValueInternal(L, (int)prop.GetValue(obj, index));
+				}
+				else
+				{
+					PushValueInternal(L, prop.GetValue(obj, index));
+				}
 				return 1;
 			}
 			catch (ArgumentException ae)
@@ -2362,22 +2617,7 @@ namespace lua
 			}
 			try
 			{
-				var propType = prop.PropertyType;
-				object converted;
-				IDisposable disposable;
-				if (TryConvertTo(propType, value, out converted, out disposable))
-				{
-					prop.SetValue(obj, converted, index);
-					if (disposable != null)
-					{
-						disposable.Dispose();
-					}
-				}
-				else
-				{
-					converted = System.Convert.ChangeType(value, propType);
-					prop.SetValue(obj, converted, index);
-				}
+				prop.SetValue(obj, ConvertTo(value, prop.PropertyType), index);
 			}
 			catch (ArgumentException ae)
 			{
@@ -2386,88 +2626,45 @@ namespace lua
 			}
 		}
 
-		internal static bool TryConvertTo(Type type, object value, out object converted, out IDisposable disposable)
+		internal static object ConvertTo(object value, Type type)
 		{
-			disposable = null;
-			if (type == typeof(int))
+			if (value.GetType() == type)
 			{
-				converted = Convert.ToInt32(value);
-				return true;
-			}
-			else if (type == typeof(float))
-			{
-				converted = Convert.ToSingle(value);
-				return true;
-			}
-			else if (type == typeof(long))
-			{
-				converted = Convert.ToInt64(value);
-				return true;
-			}
-			else if (type == typeof(double))
-			{
-				converted = Convert.ToDouble(value);
-				return true;
-			}
-			else if (type == typeof(short))
-			{
-				converted = Convert.ToInt16(value);
-				return true;
-			}
-			else if (type == typeof(uint))
-			{
-				converted = Convert.ToUInt32(value);
-				return true;
-			}
-			else if (type == typeof(ulong))
-			{
-				converted = Convert.ToUInt64(value);
-				return true;
-			}
-			else if (type == typeof(ushort))
-			{
-				converted = Convert.ToUInt16(value);
-				return true;
-			}
-			else if (type == typeof(char))
-			{
-				converted = Convert.ToChar(value);
-				return true;
-			}
-			else if (type == typeof(byte))
-			{
-				converted = Convert.ToByte(value);
-				return true;
-			}
-			else if (type == typeof(sbyte))
-			{
-				converted = Convert.ToSByte(value);
-				return true;
-			}
-			else if (type == typeof(decimal))
-			{
-				converted = Convert.ToDecimal(value);
-				return true;
+				return value;
 			}
 			else if (type == typeof(System.Action))
 			{
 				var f = (LuaFunction)value;
-				disposable = f;
-				converted = LuaFunction.ToAction(f);
-				return true;
+				var converted = LuaFunction.ToAction(f);
+				f.Dispose();
+				return converted;
 			}
 			else if (type == typeof(UnityEngine.Events.UnityAction))
 			{
 				var f = (LuaFunction)value;
-				disposable = f;
-				converted = LuaFunction.ToUnityAction(f);
-				return true;
+				var converted = LuaFunction.ToUnityAction(f);
+				f.Dispose();
+				return converted;
 			}
-			converted = null;
-			return false;
+			else if (type == typeof(LuaFunction))
+			{
+				return (LuaFunction)value;
+			}
+			else if (typeof(System.Delegate).IsAssignableFrom(type))
+			{
+				var f = (LuaFunction)value;
+				var converted = LuaFunction.ToDelegate(type, f);
+				f.Dispose();
+				return converted;
+			}
+			if (value is System.Type && type is System.Type)
+			{
+				return value;
+			}
+			return Convert.ChangeType(value, type);
 		}
 
-		internal static void SetMember(IntPtr L, object thisObject, Type type, string memberName, object value)
+		internal static void SetMember(IntPtr L, object thisObject, Type type, string memberName, object value, bool hasPrivatePrivillage)
 		{
 			if (!type.IsClass && !type.IsAnsiClass)
 			{
@@ -2477,7 +2674,10 @@ namespace lua
 			System.Reflection.MemberInfo member;
 			if (!GetMemberFromCache(type, memberName, out member))
 			{
-				var members = type.GetMember(memberName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance);
+				var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance;
+				if (hasPrivatePrivillage)
+					flags |= System.Reflection.BindingFlags.NonPublic;
+				var members = type.GetMember(memberName, flags);
 				if (members.Length > 0)
 				{
 					member = members[0];
@@ -2497,42 +2697,12 @@ namespace lua
 			else if (member.MemberType == System.Reflection.MemberTypes.Field)
 			{
 				var field = (System.Reflection.FieldInfo)member;
-				var fieldType = field.FieldType;
-				object converted;
-				IDisposable disposable;
-				if (TryConvertTo(fieldType, value, out converted, out disposable))
-				{
-					field.SetValue(thisObject, converted);
-					if (disposable != null)
-					{
-						disposable.Dispose();
-					}
-				}
-				else
-				{
-					converted = System.Convert.ChangeType(value, fieldType);
-					field.SetValue(thisObject, converted);
-				}
+				field.SetValue(thisObject, ConvertTo(value, field.FieldType));
 			}
 			else if (member.MemberType == System.Reflection.MemberTypes.Property)
 			{
 				var prop = (System.Reflection.PropertyInfo)member;
-				var propType = prop.PropertyType;
-				object converted;
-				IDisposable disposable;
-				if (TryConvertTo(propType, value, out converted, out disposable))
-				{
-					prop.SetValue(thisObject, converted, null);
-					if (disposable != null)
-					{
-						disposable.Dispose();
-					}
-				}
-				else
-				{
-					converted = System.Convert.ChangeType(value, propType);
-					prop.SetValue(thisObject, converted, null);
-				}
+				prop.SetValue(thisObject, ConvertTo(value, prop.PropertyType), null);
 			}
 			else
 			{
@@ -2541,6 +2711,7 @@ namespace lua
 			}
 		}
 
+		// http://stackoverflow.com/a/3016653/84998
 		internal enum BinaryOp
 		{
 			op_Addition = 0,
@@ -2548,6 +2719,14 @@ namespace lua
 			op_Multiply,
 			op_Division,
 			op_Modulus,
+
+			op_BitwiseAnd,
+			op_BitwiseOr,
+			op_ExclusiveOr,
+			op_OnesComplement,
+
+			op_LeftShift,
+			op_RightShift,
 
 			op_Equality,
 			op_LessThan,
@@ -2563,6 +2742,14 @@ namespace lua
 			new KeyValuePair<string, BinaryOp>("__mul", BinaryOp.op_Multiply),
 			new KeyValuePair<string, BinaryOp>("__div", BinaryOp.op_Division),
 			new KeyValuePair<string, BinaryOp>("__mod", BinaryOp.op_Modulus),
+
+			new KeyValuePair<string, BinaryOp>("__band", BinaryOp.op_BitwiseAnd),
+			new KeyValuePair<string, BinaryOp>("__bor", BinaryOp.op_BitwiseOr),
+			new KeyValuePair<string, BinaryOp>("__bxor", BinaryOp.op_ExclusiveOr),
+			new KeyValuePair<string, BinaryOp>("__bnot", BinaryOp.op_OnesComplement),
+
+			new KeyValuePair<string, BinaryOp>("__shl", BinaryOp.op_LeftShift),
+			new KeyValuePair<string, BinaryOp>("__shr", BinaryOp.op_RightShift),
 
 			new KeyValuePair<string, BinaryOp>("__eq", BinaryOp.op_Equality),
 			new KeyValuePair<string, BinaryOp>("__lt", BinaryOp.op_LessThan),

@@ -6,6 +6,8 @@ function UI:Awake()
 	self.funcList = Bridge.FindLBT(self, 'FuncList')
 	self.equipTree = Bridge.FindLBT(self, 'EquipTree')
 	self.insepctor = Bridge.FindLBT(self, 'Inspector')
+
+	UI.current = self
 end
 
 function UI:AddFunc(title, func)
@@ -22,6 +24,17 @@ end
 
 function UI:GetSelectedPartNode()
 	return self.equipTree:GetSelectedNode()
+end
+
+function UI:OnDestroy()
+	UI.current = nil
+end
+
+
+function UI.Inspect(part)
+	local c = UI.current
+	if not c then return end
+	c.inspector:Inspect(part)
 end
 
 

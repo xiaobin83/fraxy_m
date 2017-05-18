@@ -953,6 +953,41 @@ namespace lua.test
 
 		}
 
+		[Test]
+		public void TestEnumBitwiseOp()
+		{
+			L.Import(typeof(System.Reflection.BindingFlags), "flags");
+			using (var f = LuaFunction.NewFunction(L,
+				"function() return flags.NonPublic | flags.Instance end"))
+			{
+				var r = f.Invoke1();
+				Assert.AreEqual((int)(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance), r);
+			}
+		}
+
+		[Test]
+		public void TestEnumAsArgument()
+		{
+			using (var f = LuaFunction.NewFunction(L,
+				"function(v) return type(v) == 'number' end"))
+			{
+				var r = f.Invoke1(System.Reflection.BindingFlags.Instance);
+				Assert.AreEqual(true, (bool)r);
+			}
+		}
+
+		[Test]
+		public void TestToEnum()
+		{
+			L.Import(typeof(System.Reflection.BindingFlags), "flags");
+			using (var f = LuaFunction.NewFunction(L,
+				"function() return csharp.to_enum(flags, 36) end"))
+			{
+				var r = (System.Reflection.BindingFlags)f.Invoke1();
+				Assert.AreEqual(System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance, r);
+			}
+		}
+
 		int c = 20;
 		int HaveFun(int a, int b)
 		{
@@ -1333,6 +1368,16 @@ namespace lua.test
 			{
 				Assert.True(thisMessage.IndexOf("ambiguous") > 0);
 				throw e;
+			}
+		}
+
+		[Test]
+		public void TestFuncOverloading_Ambiguous_ExactMatch()
+		{
+			var t = new TestOverloading4();
+			using (var f = LuaFunction.NewFunction(L, "function(d) return d[{csharp.p_exact('string', 'string', 'object'), 'Func'}](d, 'a', 'b', 20) end"))
+			{
+				Assert.AreEqual(10, f.Invoke1(t));
 			}
 		}
 
@@ -1811,7 +1856,7 @@ namespace lua.test
 		public void TestConvertLuaFunctionToSystemAction()
 		{
 			var f = LuaFunction.NewFunction(L, "function() _G['test1234'] = 20 end");
-			var action = (System.Action)f;
+			var action = LuaFunction.ToAction(f);
 			action();
 			f.Dispose();
 
@@ -2016,5 +2061,167 @@ namespace lua.test
 			System.GC.Collect();
 			LuaFunction.CollectActionPool();
 		}
+
+		class PrivatePrivillage
+		{
+			int Foo()
+			{
+				return 42;
+			}
+			int Bar = 84;
+		}
+
+		[Test]
+		public void TestPrivatePrivillage()
+		{
+			var t = new PrivatePrivillage();
+			using (var f = LuaFunction.NewFunction(L, "function(d) return d[{csharp.p_private(), 'Bar'}] end"))
+			{
+				Assert.AreEqual(84, f.Invoke1(t));
+			}
+		}
+
+		[Test]
+		public void TestPrivatePrivillage2()
+		{
+			var t = new PrivatePrivillage();
+			using (var f = LuaFunction.NewFunction(L, "function(d) return d[{csharp.p_private(), 'Foo'}](d) end"))
+			{
+				Assert.AreEqual(42, f.Invoke1(t));
+			}
+		}
+
+
+		[Test]
+		public void TestTypeOf()
+		{
+			L.Import(typeof(int), "SystemInt");
+			using (var f = LuaFunction.NewFunction(L, "function() return csharp.typeof(SystemInt) end"))
+			{
+				Assert.AreEqual(typeof(int), f.Invoke1());
+			}
+		}
+
+		class TestR
+		{
+			int Foo()
+			{
+				return 42;
+			}
+		}
+
+		[Test]
+		public void TestReflectionInLua()
+		{
+			L.Import(typeof(TestR), "TestR");
+			L.Import(typeof(System.Reflection.BindingFlags), "BindingFlags");
+			using (var f = LuaFunction.NewFunction(L,
+				"function(d)\n" +
+				"  local mi = csharp.typeof(TestR):GetMethod('Foo', csharp.to_enum(BindingFlags, 36))\n" +
+				"  return mi:Invoke(d, csharp.make_array('System.Object', 0))\n" + 
+				"end"))
+			{
+				Assert.AreEqual(42, f.Invoke1(new TestR()));
+			}
+		}
+
+		[Test]
+		public void TestTypeOf2()
+		{
+			L.Import(typeof(TestR), "TestR");
+			using (var f = LuaFunction.NewFunction(L,
+				"function(d)\n"	+
+				"  return d:GetType() == csharp.typeof(TestR) and csharp.typeof(d) == csharp.typeof(TestR)\n" + 
+				"end"))
+			{
+				Assert.AreEqual(true, f.Invoke1(new TestR()));
+			}
+		}
+
+
+		class TestA
+		{
+			public T Foo<T>(double a)
+			{
+				return (T)System.Convert.ChangeType(a, typeof(T));
+			}
+
+			public int Foo(int a)
+			{
+				return a;
+			}
+
+			public int Foo(decimal a)
+			{
+				return (int)a;
+			}
+		}
+
+
+		[Test]
+		public void TestCallingGenericMethod()
+		{
+			using (var f = LuaFunction.NewFunction(L, "function(d) return d[{csharp.p_generic('int'), 'Foo'}](d, 20.0) end"))
+			{
+				Assert.AreEqual(20, f.Invoke1(new TestA()));
+			}
+		}
+
+
+
+		class TestB
+		{
+			public int Foo(System.Action<int, string> complete)
+			{
+				complete(10, "a");
+				return 42;
+			}
+
+			public int Bar(System.Func<int, int, int> func)
+			{
+				return func(10, 32);
+			}
+		}
+
+		[Test]
+		public void TestGenericActionPre()
+		{
+			L.Import(typeof(UnityEngine.Debug), "Debug");
+			using (var f = LuaFunction.NewFunction(L,
+				"function(d, f)\n"	+
+				"  return d:Foo(f)\n" + 
+				"end"))
+			{
+				System.Action<int, string> k = (a, b) => { Debug.Log(a.ToString() + b); };
+				Assert.AreEqual(42, f.Invoke1(new TestB(), k));
+			}
+		}
+
+		[Test]
+		public void TestGenericAction()
+		{
+			L.Import(typeof(UnityEngine.Debug), "Debug");
+			using (var f = LuaFunction.NewFunction(L,
+				"function(d)\n"	+
+				"  return d:Foo(function(a, b) Debug.Log(tostring(a) .. b) end)\n" + 
+				"end"))
+			{
+				Assert.AreEqual(42, f.Invoke1(new TestB()));
+			}
+		}
+
+		[Test]
+		public void TestGenericFunc()
+		{
+			L.Import(typeof(UnityEngine.Debug), "Debug");
+			using (var f = LuaFunction.NewFunction(L,
+				"function(d)\n"	+
+				"  return d:Bar(function(a, b) return a+b end)\n" + 
+				"end"))
+			{
+				Assert.AreEqual(42, f.Invoke1(new TestB()));
+			}
+		}
+
 	}
 }
