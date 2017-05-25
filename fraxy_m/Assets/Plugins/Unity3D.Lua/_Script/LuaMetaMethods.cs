@@ -187,7 +187,7 @@ namespace lua
 			}
 			else if (Api.lua_isstring(L, 2))
 			{
-				return Lua.GetMember(L, thisObject, typeObject, Api.lua_tostring(L, 2));
+				return Lua.GetMember(L, thisObject, typeObject, Api.lua_tostring(L, 2), false, null, null);
 			}
 			else if (Api.lua_istable(L, 2))
 			{
@@ -204,7 +204,9 @@ namespace lua
 					{
 						var name = (string)ret[1];
 						var hasPrivatePrivillage = (bool)ret[2];
-						return Lua.GetMember(L, thisObject, typeObject, name, hasPrivatePrivillage: hasPrivatePrivillage);
+						var exactTypes = (Type[])ret[3];
+						var genericTypes = (Type[])ret[4];
+						return Lua.GetMember(L, thisObject, typeObject, name, hasPrivatePrivillage, exactTypes, genericTypes);
 					}
 			
 				}
@@ -345,34 +347,42 @@ namespace lua
 
 		static int MetaBinaryOpFunctionInternal(lua_State L)
 		{
-			if (Api.lua_rawequal(L, 1, 2))
-			{
-				Api.lua_pushboolean(L, true);
-				return 1;
-			}
-
-			var objectArg = Api.luaL_testudata(L, 1, Lua.objectMetaTable); // test first one
+			var op = (Lua.BinaryOp)Api.lua_tointeger(L, Api.lua_upvalueindex(2));
+			var objectArg = Api.luaL_testudata(L, 1, Lua.objectMetaTable);
 			var objectArg2 = Api.luaL_testudata(L, 2, Lua.objectMetaTable);
-			if (objectArg == IntPtr.Zero || objectArg2 == IntPtr.Zero)
+			if (objectArg == IntPtr.Zero && objectArg2 == IntPtr.Zero)
 			{
-				Lua.Assert(false, string.Format("Binary op {0} called on unexpected values.", Api.lua_tostring(L, Api.lua_upvalueindex(1))));
+				throw new LuaException(string.Format("Binary op {0} called on unexpected values.", Api.lua_tostring(L, Api.lua_upvalueindex(1))));
 			}
-			var obj = Lua.UdataToObject(objectArg);
-			var obj2 = Lua.UdataToObject(objectArg2);
-			if (obj == obj2)
+			object obj1 = null, obj2 = null;
+			if (objectArg != IntPtr.Zero) obj1 = Lua.UdataToObject(objectArg);
+			if (objectArg2 != IntPtr.Zero) obj2 = Lua.UdataToObject(objectArg2);
+			if (op == Lua.BinaryOp.op_Equality)
 			{
-				Api.lua_pushboolean(L, true);
-				return 1;
+				if ((obj1 == obj2)
+					|| (obj1 != null && obj1.Equals(obj2))
+					|| (obj2 != null && obj2.Equals(obj1)))
+				{
+					Api.lua_pushboolean(L, true);
+					return 1;
+				}
 			}
+			var obj = obj1;
+			if (obj == null)
+				obj = obj2;
 
 			var type = obj.GetType();
+			var opName = Api.lua_tostring(L, Api.lua_upvalueindex(1));
+			var	members	= Lua.GetMembers(type, opName, hasPrivatePrivillage: false);
+			if (members.Length == 0)
+			{
+				throw new LuaException(string.Format("{0} not found in type {1}", opName, type.ToString()));
+			}
 
-			// upvalue 1 --> isInvokingFromClass
-			// upvalue 2 --> userdata (host of metatable).
-			// upvalue 3 --> member name
-			Api.lua_pushboolean(L, true);
-			Lua.PushObjectInternal(L, type);
-			Api.lua_pushvalue(L, Api.lua_upvalueindex(1));
+			long invocationFlags = (long)Lua.InvocationFlags.Static;
+			Api.lua_pushinteger(L, invocationFlags); // upvalue 1 --> invocationFlags
+			Lua.PushObjectInternal(L, type);// upvalue 2 --> userdata (host of metatable).
+			Lua.PushObjectInternal(L, members); // upvalue 3 --> members
 			Api.lua_pushcclosure(L, Lua.InvokeMethod, 3);
 			Api.lua_pushvalue(L, 1);
 			Api.lua_pushvalue(L, 2);
@@ -398,18 +408,22 @@ namespace lua
 		{
 			var objectArg = Api.luaL_testudata(L, 1, Lua.objectMetaTable); // test first one
 			if (objectArg == IntPtr.Zero)
-			{
-				Lua.Assert(false, string.Format("Binary op {0} called on unexpected values.", Api.lua_tostring(L, Api.lua_upvalueindex(1))));
-			}
+				throw new LuaException(string.Format("Binary op {0} called on unexpected values.", Api.lua_tostring(L, Api.lua_upvalueindex(1))));
 			var obj = Lua.UdataToObject(objectArg);
 			var type = obj.GetType();
+			var opName = Api.lua_tostring(L, Api.lua_upvalueindex(1));
+			var members = Lua.GetMembers(type, opName, hasPrivatePrivillage: false);
+			if (members.Length == 0)
+			{
+				throw new LuaException(string.Format("{0} not found in type {1}", opName, type.ToString()));
+			}
 
-			// upvalue 1 --> isInvokingFromClass
+			// upvalue 1 --> invocationFlags
 			// upvalue 2 --> userdata (host of metatable).
-			// upvalue 3 --> member name
-			Api.lua_pushboolean(L, true);
+			// upvalue 3 --> members
+			Api.lua_pushinteger(L, (long)Lua.InvocationFlags.Static);
 			Lua.PushObjectInternal(L, type);
-			Api.lua_pushvalue(L, Api.lua_upvalueindex(1));
+			Lua.PushObjectInternal(L, members);
 			Api.lua_pushcclosure(L, Lua.InvokeMethod, 3);
 			Api.lua_pushvalue(L, 1);
 			Lua.CallInternal(L, 1, 1);
