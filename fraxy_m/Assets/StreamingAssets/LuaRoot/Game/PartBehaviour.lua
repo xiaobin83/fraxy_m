@@ -55,6 +55,7 @@ function Part:SetType(type)
 			content_type = 'Alphanumeric'
 		}
 	}
+	
 	self.props.type = Prop.New {
 		get = function()
 			return self.data.value
