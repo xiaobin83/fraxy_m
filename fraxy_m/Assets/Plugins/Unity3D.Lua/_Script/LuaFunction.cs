@@ -126,9 +126,14 @@ namespace lua
 				}
 
 
-				void ForAOTGeneration()
+				void _ForAOTGeneration()
 				{
 					GenericAction<string, object>(string.Empty, null);
+					GenericAction<string, long>(string.Empty, 0);
+					GenericAction<string, double>(string.Empty, 0);
+					GenericAction<string, string>(string.Empty, string.Empty);
+					GenericAction<string, LuaFunction>(string.Empty, null);
+					GenericAction<string, LuaTable>(string.Empty, null);
 				}
 
 				static System.Reflection.MemberInfo[] genericActions_;

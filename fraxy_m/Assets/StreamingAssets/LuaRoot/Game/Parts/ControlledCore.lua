@@ -61,4 +61,8 @@ function CC.Reset(part)
 
 end
 
+function CC.OnInspectorGUI(part, inspector)
+	part.var.name = inspector:InputField(part.var.name)
+end
+
 return CC

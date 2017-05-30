@@ -29,7 +29,9 @@ function UI_Insp_DropDown:SetContent(content)
 		local go = GameObject.Instantiate(self.prefabEntry)
 		go.transform:SetParent(self.content.transform, false)
 		local lbt = Bridge.GetLBT(go)
-		lbt:OnItemCreated({text = item.title, onClick = function() self:OnItemSelected(item) end})
+		if lbt.OnItemCreated then
+			lbt:OnItemCreated({text = item.title, onClick = function() self:OnItemSelected(item) end})
+		end
 	end
 	self:OnItemSelected(content[1])
 end

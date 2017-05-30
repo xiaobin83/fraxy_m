@@ -9,8 +9,6 @@ local Prop = require 'Game/UI/Prop'
 function Part:Awake()
 	self.var = {}
 	self.subparts = {}
-	self.props = {}
-	self.data = {}
 end
 
 function Part:CreateSprite()
@@ -38,42 +36,8 @@ function Part:SetType(type)
 		end
 	end
 
-	self.data.name = self.data.name or type.name
-
-	self.props = {}
-	self.props.name = Prop.New { 
-		get = function()
-			return self.data.name
-		end,
-		set = function(value)
-			self.data.name = value
-		end,
-		inspector = {
-			name = 'Input',
-			title = T('PartName'),
-			placeholder = self.data.name,
-			content_type = 'Alphanumeric'
-		}
-	}
-	
-	self.props.type = Prop.New {
-		get = function()
-			return self.data.value
-		end,
-		set = function(value)
-			self.data.type = value
-		end,
-		inspector = {
-			name = 'DropDown',
-			title = 'Type',
-			list = PartType,
-			selected = self.data.type.name
-		}
-	}
-	
-	
-	
 	self.script = type.script
+
 	self:CreateSprite()
 	if self.script.Attach then
 		self.script.Attach(self)
@@ -94,6 +58,12 @@ end
 function Part:Reset()
 	local f = self.script.Reset
 	if f then f(self) end
+end
+
+function Part:OnInspectGUI(inspector)
+	if self.script.OnInspectGUI then
+		self.script.OnInspectGUI(self, inspector)
+	end
 end
 
 function Part:Event_PointerClick(evtData)
