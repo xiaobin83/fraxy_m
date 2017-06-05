@@ -49,7 +49,6 @@ function Inspector:InputField(label, text)
 		local lbt = Bridge.GetLBT(go)
 		lbt:SetLabel(label)
 		lbt:AddListener(
-			'inspector', 
 			function(event, object)
 				if event == 'onValueChanged' then
 					item.value = object
