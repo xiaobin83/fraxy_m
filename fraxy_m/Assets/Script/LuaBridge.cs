@@ -11,7 +11,7 @@ public class LuaBridge : MonoBehaviour
 
 	void Awake()
 	{
-		Debug.Assert(current == null);
+        Debug.Assert(current == null);
 		DontDestroyOnLoad(gameObject);
 
 		lua.Lua.typeLoader = TypeLoader;

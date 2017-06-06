@@ -1,5 +1,6 @@
 local UnityEngine = require 'UnityEngine'
 local Debug = require 'Debug'
+local ContentType = UnityEngine.UI.InputField[{csharp.p_nested_type(), 'ContentType'}]
 
 local UI_Insp_Input = {}
 
@@ -10,34 +11,42 @@ function UI_Insp_Input:Awake()
 	self.event = self:FindEvent('event')
 end
 
+--[[
 function UI_Insp_Input:Start()
 	self:SetLabel('Test')
-	self:SetPrompt('input some string')
+	self:SetPlaceholder('input some string')
+	self:SetContentType('integer')
 	self:AddListener(
 		function(event, object)
 			Debug.Log(event .. ': ' .. tostring(object))
 		end)
 	self:SetContent('')
 end
+--]]
 
 function UI_Insp_Input:SetLabel(label)
 	self.textName.text = label
 end
 
 
-function UI_Insp_Input:SetPrompt(prompt)
-	self.inputField.placeholder.text = prompt
+function UI_Insp_Input:SetPlaceholder(placeholderText)
+	self.inputField.placeholder.text = placeholderText
 end
 
 function UI_Insp_Input:SetContentType(type)
 	if type == 'alphanumeric' then
+		self.inputField.contentType = ContentType.Alphanumeric
 	elseif type == 'integer' then
+		self.inputField.contentType = ContentType.IntegerNumber
 	elseif type == 'float' then
+		self.inputField.contentType = ContentType.DecimalNumber
+	else
+		self.inputField.contentType = ContentType.Standard
 	end
 end
 
 function UI_Insp_Input:SetContent(text)
-	self.inputField.text = text
+	self.inputField.text = text or ''
 end
 
 function UI_Insp_Input:AddListener(func)

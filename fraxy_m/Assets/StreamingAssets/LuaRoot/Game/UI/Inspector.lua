@@ -16,7 +16,7 @@ end
 
 function Inspector:Clear()
 	if self.items then
-		for _, item in ipairs(items) do
+		for _, item in ipairs(self.items) do
 			GameObject.Destroy(item.gameObject)
 		end
 	end
@@ -40,7 +40,7 @@ function Inspector:OnInspectorGUI()
 	end
 end
 
-function Inspector:InputField(label, text)
+function Inspector:InputField(label, text, type)
 	local item = self.items[self.index]
 	if not item then
 		item = {}
@@ -48,6 +48,7 @@ function Inspector:InputField(label, text)
 		go.transform:SetParent(self.transform, false)
 		local lbt = Bridge.GetLBT(go)
 		lbt:SetLabel(label)
+		lbt:SetContentType(type or 'alphanumeric')
 		lbt:AddListener(
 			function(event, object)
 				if event == 'onValueChanged' then
@@ -55,9 +56,10 @@ function Inspector:InputField(label, text)
 					self:Repaint()
 				end
 			end)
+		item.value = text
 		self.items[self.index] = item
+		lbt:SetContent(text)
 	end
-	item:SetContent(text)
 	self.index = self.index + 1
 	return item.value
 end

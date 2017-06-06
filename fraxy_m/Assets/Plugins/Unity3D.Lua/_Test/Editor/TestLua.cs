@@ -1034,6 +1034,50 @@ namespace lua.test
 			}
 		}
 
+		class TestSetEnumClass
+		{
+			public enum TestEnum
+			{
+				T0 = 20, T1 = 42
+			}
+
+			public TestEnum SetEnum(TestEnum t)
+			{
+				return t;
+			}
+
+			public TestEnum e;
+		}
+
+		[Test]
+		public void TestSetEnum()
+		{
+			L.Import(typeof(TestSetEnumClass), "TTT");
+			using (var f = LuaFunction.NewFunction(L,
+				"function(d)\n" +
+				"  local t = TTT[{csharp.p_nested_type(), 'TestEnum'}]\n" +
+				"  d.e = t.T1\n" +
+				"  return d.e\n" + 
+				"end\n"))
+			{
+				Assert.AreEqual((int)TestSetEnumClass.TestEnum.T1, f.Invoke1(new TestSetEnumClass()));
+			}
+		}
+
+		[Test]
+		public void TestSetEnum2()
+		{
+			L.Import(typeof(TestSetEnumClass), "TTT");
+			using (var f = LuaFunction.NewFunction(L,
+				"function(d)\n" +
+				"  local t = TTT[{csharp.p_nested_type(), 'TestEnum'}]\n" +
+				"  return d:SetEnum(t.T1)\n" +
+				"end\n"))
+			{
+				Assert.AreEqual((int)TestSetEnumClass.TestEnum.T1, f.Invoke1(new TestSetEnumClass()));
+			}
+		}
+
 		[Test]
 		public void TestToEnum()
 		{
@@ -2211,9 +2255,20 @@ namespace lua.test
 
 			public int Foo(decimal a)
 			{
+				AndroidJavaObject o;
 				return (int)a;
 			}
-		}
+
+
+			public T Bar<T>(int k)
+			{
+				return System.Activator.CreateInstance<T>();
+			}
+
+			public void Bar(int k)
+			{
+			}
+        }
 
 
 		[Test]
@@ -2224,6 +2279,17 @@ namespace lua.test
 				Assert.AreEqual(20, f.Invoke1(new TestA()));
 			}
 		}
+
+
+		[Test]
+		public void TestMatchingGenericMethod()
+		{
+			using (var f = LuaFunction.NewFunction(L, "function(d) d[{csharp.p_exact('int', 'System.Void'), 'Bar'}](d, 10) end"))
+			{
+				f.Invoke1(new TestA());
+			}
+		}
+
 
 
 
@@ -2302,6 +2368,29 @@ namespace lua.test
 			{
 				Assert.AreEqual(42, f.Invoke1(p));
 			}
+		}
+
+		class TTT
+		{
+			public class NestedTTT
+			{
+				public int Foo()
+				{
+					return 42;
+				}
+			}
+		}
+
+		[Test]
+		public void TestNestedType()
+		{
+			L.Import(typeof(TTT), "TTT");
+			using (var f = LuaFunction.NewFunction(L,
+				"function(ttt) return ttt[{csharp.p_nested_type(), csharp.p_private(), 'NestedTTT'}]():Foo() end"))
+			{
+				Assert.AreEqual(42, f.Invoke1(new TTT()));
+			}
+
 		}
 	}
 }
