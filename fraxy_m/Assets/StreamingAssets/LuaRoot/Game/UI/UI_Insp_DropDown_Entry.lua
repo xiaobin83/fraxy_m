@@ -7,7 +7,7 @@ function UI_Insp_DropDown_Entry:Awake()
 end
 
 function UI_Insp_DropDown_Entry:OnItemCreated(item)
-	self.text.text = item.text
+	self.text.text = item.label
 	self.btn.onClick:AddListener(item.onClick)
 end
 

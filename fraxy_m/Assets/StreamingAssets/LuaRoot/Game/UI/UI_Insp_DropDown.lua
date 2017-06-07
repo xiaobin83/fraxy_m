@@ -20,31 +20,38 @@ function UI_Insp_DropDown:OnDropDownButtonClicked()
 	self.dropDownList:SetActive(not self.dropDownList.activeSelf)
 end
 
-function UI_Insp_DropDown:SetTitle(title)
+function UI_Insp_DropDown:SetLabel(title)
 	self.textName.text = title
 end
 
-function UI_Insp_DropDown:SetContent(content)
-	for _, item in ipairs(content) do
+function UI_Insp_DropDown:SetContent(content, selectedIndex)
+	for i, item in ipairs(content) do
 		local go = GameObject.Instantiate(self.prefabEntry)
 		go.transform:SetParent(self.content.transform, false)
 		local lbt = Bridge.GetLBT(go)
 		if lbt.OnItemCreated then
-			lbt:OnItemCreated({text = item.title, onClick = function() self:OnItemSelected(item) end})
+			local label
+			if type(item) == 'table' then
+				label = item.label or tostring(i)
+			else
+				label = tostring(i)
+			end
+			lbt:OnItemCreated({label = label, onClick = function() self:OnItemSelected(item, i) end})
 		end
 	end
-	self:OnItemSelected(content[1])
+	local i = selectedIndex or 1
+	self:OnItemSelected(content[i], i)
 end
 
 
-function UI_Insp_DropDown:OnItemSelected(item)
-	local previous = self.selected
-	self.selected = item
-	self.textSelected.text = item.title
+function UI_Insp_DropDown:OnItemSelected(item, atIndex)
+	local previous = self.selectedIndex
+	self.selectedIndex = atIndex
+	self.textSelected.text = item.label
 	self.dropDownList:SetActive(false)
 	if self.event then
-		if previous ~= item then
-			self.event:Invoke('onValueChanged', item)
+		if previous ~= atIndex then
+			self.event:Invoke('onValueChanged', atIndex)
 		end
 	end
 end

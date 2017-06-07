@@ -50,9 +50,13 @@ function Inspector:InputField(label, text, type)
 		lbt:SetLabel(label)
 		lbt:SetContentType(type or 'alphanumeric')
 		lbt:AddListener(
-			function(event, object)
-				if event == 'onValueChanged' then
-					item.value = object
+			function(event, newText)
+				if event == 'onValueChanged' or event == 'onEndEdit' then
+					if type == 'integer' or type == 'float' then
+						item.value = tonumber(newText)
+					else
+						item.value = newText
+					end
 					self:Repaint()
 				end
 			end)
@@ -67,8 +71,24 @@ end
 function Inspector:DropDown(label, items, selectedIndex)
 	local item = self.items[self.index]
 	if not item then
-
+		item = {}
+		local go = GameObject.Instantiate(self.prefabDropDown)
+		go.transform:SetParent(self.transform, false)
+		local lbt = Bridge.GetLBT(go)
+		lbt:SetLabel(label)
+		lbt:AddListener(
+			function(event, object)
+				if event == 'onValueChanged' then
+					item.value = object
+					self:Repaint()
+				end
+			end)
+		item.value = items[selectedIndex]
+		self.items[self.index] = item
+		lbt:SetContent(items, selectedIndex)
 	end
+	self.index = self.index + 1
+	return item.value
 end
 
 function Inspector:Repaint()
