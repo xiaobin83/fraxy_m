@@ -5,7 +5,7 @@ local UI = {}
 function UI:Awake()
 	self.funcList = Bridge.FindLBT(self, 'FuncList')
 	self.equipTree = Bridge.FindLBT(self, 'EquipTree')
-	self.insepctor = Bridge.FindLBT(self, 'Inspector')
+	self.inspector = Bridge.FindLBT(self, 'Inspector')
 
 	UI.current = self
 end

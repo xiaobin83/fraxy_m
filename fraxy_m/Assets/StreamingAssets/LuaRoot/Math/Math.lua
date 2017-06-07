@@ -5,6 +5,7 @@ local UnityVector3 = csharp.checked_import('UnityEngine.Vector3')
 local Math = {}
 
 Math.Vector2 = {}
+Math.Vector2.zero = v2d.Vector2D(0, 0)
 setmetatable(
 	Math.Vector2, 
 	{ 
@@ -24,6 +25,7 @@ end
 ---------------------
 
 Math.Vector3 = {}
+Math.Vector3.zero = v2d.Vector3D(0, 0, 0)
 setmetatable(
 	Math.Vector3,
 	{

@@ -1,11 +1,12 @@
-local PartType = {}
-
+local Math = require 'Math/Math'
 local T = require 'Text'
-
 local ControlledCore = require 'Game/Parts/ControlledCore'
 local Core = require 'Game/Parts/Core'
 local Boost = require 'Game/Parts/Boost'
 local Deco = require 'Game/Parts/Deco'
+
+
+local PartType = {}
 
 PartType.ControlledCore = {
 	internalName = 'ControlledCore',
@@ -43,13 +44,21 @@ PartType.BoostType.auto_assist = 4
 
 PartType.Boost_01 = {
 	internalName = 'Boost 01',
-	name = T('Boost_01'),
 	sprite = 'Parts/p_boost_01',
 	script = Boost,
 
+	-- constant part, update from somewhere
 	attr = {
 		power = 0.5,
 		type = PartType.BoostType.normal
+	},
+	
+	-- serializable part
+	serializable = {
+		name = T('Boost_01'),
+		offset = Math.Vector3.zero,
+		angular = 0,
+		localAngular = 0
 	}
 }
 
@@ -57,11 +66,19 @@ PartType.Boost_01 = {
 
 PartType.Deco_01 = {
 	internalName = 'Deco 01',
-	name = T('Deco_01'),
 	sprite = 'Parts/p_deco_01',
 	script = Deco,
 
-	attr = {}
+	attr = {
+
+	},
+
+	serializable = {
+		name = T('Deco_01'),
+		offset = Math.Vector3.zero,
+		angular = 0,
+		localAngular = 0,
+	}
 }
 
 

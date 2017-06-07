@@ -11,12 +11,12 @@ function Part:Awake()
 	self.subparts = {}
 end
 
-function Part:CreateSprite()
+function Part:CreateSprite(sprite)
 	if self.sprite then
 		self.sprite:Destroy()
 		self.sprite = nil
 	end
-	local spr = Global.RunningField:NewSprite(self.type.sprite)
+	local spr = Global.RunningField:NewSprite(sprite)
 	spr.transform:SetParent(self.transform)
 	self.sprite = spr
 end
@@ -36,15 +36,26 @@ function Part:SetType(type)
 		end
 	end
 
-	self.script = type.script
 
-	self:CreateSprite()
+	self:CreateSprite(type.sprite)
+	self:Deserialize(type.serializable)
+
+	self.type = type
+	self.script = type.script
 	if self.script.Attach then
 		self.script.Attach(self)
 	end
 	if self.script.Start then
 		self.script.Start(self)
 	end
+
+
+end
+
+function Part:Deserialize(serializable)
+	local s = {} -- from somewhere
+	setmetatable(s, { __index = serializable })
+	self.s = s
 end
 
 function Part:Update()
@@ -60,9 +71,9 @@ function Part:Reset()
 	if f then f(self) end
 end
 
-function Part:OnInspectGUI(inspector)
-	if self.script.OnInspectGUI then
-		self.script.OnInspectGUI(self, inspector)
+function Part:OnInspectorGUI(inspector)
+	if self.script.OnInspectorGUI then
+		self.script.OnInspectorGUI(self, inspector)
 	end
 end
 
