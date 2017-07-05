@@ -1,0 +1,32 @@
+message Vector2 {
+	required float x = 1;
+	repeated float y = 2;
+}
+
+message Part {
+	required string type = 1;
+	optional string name = 2;
+	optional Vector2 offset = 3;
+	optional uint32 angular = 4 [default = 0];
+	optional uint32 localAngular = 5 [default = 0];
+	repeated Part subparts = 15;
+}
+
+
+enum ErrorCode 
+{
+	Ok = 1,
+}
+
+message Result {
+	required ErrorCode errorCode = 1;
+	optional string message = 2;
+}
+
+message ConstructDroidRequest {
+	required Part root = 1;
+}
+
+message ConstructDroidResponse {
+	repeated Result result = 1;
+}

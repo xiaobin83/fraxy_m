@@ -25,7 +25,7 @@ end
 ---------------------
 
 Math.Vector3 = {}
-Math.Vector3.zero = v2d.Vector3D(0, 0, 0)
+Math.Vector3.zero = v3d.Vector3D(0, 0, 0)
 setmetatable(
 	Math.Vector3,
 	{
