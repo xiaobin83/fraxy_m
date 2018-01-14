@@ -1,5 +1,4 @@
-local Bridge = require 'Game.Bridge'
-local Debug = require 
+
 
 local TestInspector = {}
 
@@ -11,7 +10,7 @@ local items = {
 
 function TestInspector:Start()
 	local go = self:FindGameObject('Inspector')
-	self.inspector = Bridge.GetLBT(go)
+	self.inspector = Unity.Lua.GetLBT(go)
 	self.testString = 'kkk'
 	self.testInteger = 10
 	self.itemIndex = 1

@@ -1,6 +1,6 @@
-local NT = csharp.checked_import('Unity.Time')
-
 local Time = {}
+local Unity = require 'unity.Unity'
+local NT = Unity.Time
 
 local fixedDeltaTime
 function Time.GetFixedDeltaTime()

@@ -1,5 +1,4 @@
 local Unity = require 'unity.Unity'
-local Debug = require 
 local ContentType = Unity.UI.InputField[{csharp.p_nested_type(), 'ContentType'}]
 
 local UI_Insp_Input = {}

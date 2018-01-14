@@ -16,11 +16,11 @@ GameObject:
   m_ObjectHideFlags: 0
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 100100000}
-  serializedVersion: 4
+  serializedVersion: 5
   m_Component:
-  - 224: {fileID: 224000011021877066}
-  - 114: {fileID: 114000013304721344}
-  - 114: {fileID: 114000012192550280}
+  - component: {fileID: 224000011021877066}
+  - component: {fileID: 114000013304721344}
+  - component: {fileID: 114000012192550280}
   m_Layer: 5
   m_Name: UI_Constraction
   m_TagString: Untagged
@@ -39,12 +39,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4273a2247dae2294aae75e185533b928, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  scriptName: Game/UI/ListView
-  keys:
-  - PrefabItem
-  gameObjects:
-  - {fileID: 1000010594154066, guid: 5e304f50215db02478fb4ae3ef82ee16, type: 2}
-  - {fileID: 0}
+  scriptName: Game.UI.ListView
+  objectKeys: []
+  objects: []
+  eventKeys: []
+  events: []
   _InitChunk: 
 --- !u!114 &114000013304721344
 MonoBehaviour:
@@ -78,10 +77,10 @@ RectTransform:
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
   m_AnchoredPosition: {x: 0, y: 0}

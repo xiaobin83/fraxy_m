@@ -232,7 +232,7 @@ Prefab:
     - target: {fileID: 224000010729397658, guid: 2e3065c86198f4f4cb4fa1ef152cfb76,
         type: 2}
       propertyPath: m_SizeDelta.y
-      value: 323.57245
+      value: 410
       objectReference: {fileID: 0}
     - target: {fileID: 224000010729397658, guid: 2e3065c86198f4f4cb4fa1ef152cfb76,
         type: 2}
@@ -277,7 +277,7 @@ Prefab:
     - target: {fileID: 224000012586531094, guid: 2e3065c86198f4f4cb4fa1ef152cfb76,
         type: 2}
       propertyPath: m_AnchoredPosition.y
-      value: 0
+      value: -0.000006519258
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_ParentPrefab: {fileID: 100100000, guid: 2e3065c86198f4f4cb4fa1ef152cfb76, type: 2}
@@ -395,7 +395,7 @@ Prefab:
     - target: {fileID: 224000011021877066, guid: 4b7f1c91400126843bd978b98eddd819,
         type: 2}
       propertyPath: m_AnchoredPosition.y
-      value: -653.57245
+      value: -740
       objectReference: {fileID: 0}
     - target: {fileID: 224000011021877066, guid: 4b7f1c91400126843bd978b98eddd819,
         type: 2}
@@ -608,7 +608,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4273a2247dae2294aae75e185533b928, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  scriptName: Game/Camera
+  scriptName: Game.Camera
   objectKeys: []
   objects: []
   eventKeys: []
@@ -1142,7 +1142,7 @@ Prefab:
     - target: {fileID: 224000011048435560, guid: c6a2833a901dea94f98d8ca052c50c23,
         type: 2}
       propertyPath: m_AnchoredPosition.y
-      value: 0
+      value: 0.0000015124679
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_ParentPrefab: {fileID: 100100000, guid: c6a2833a901dea94f98d8ca052c50c23, type: 2}

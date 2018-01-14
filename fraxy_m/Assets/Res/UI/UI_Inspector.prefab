@@ -16,14 +16,14 @@ GameObject:
   m_ObjectHideFlags: 0
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 100100000}
-  serializedVersion: 4
+  serializedVersion: 5
   m_Component:
-  - 224: {fileID: 224000011098954240}
-  - 222: {fileID: 222000012950872118}
-  - 114: {fileID: 114000013823106848}
-  - 114: {fileID: 114000012615808998}
-  - 114: {fileID: 114000012403350890}
-  - 114: {fileID: 114000010553641030}
+  - component: {fileID: 224000011098954240}
+  - component: {fileID: 222000012950872118}
+  - component: {fileID: 114000013823106848}
+  - component: {fileID: 114000012615808998}
+  - component: {fileID: 114000012403350890}
+  - component: {fileID: 114000010553641030}
   m_Layer: 5
   m_Name: UI_Inspector
   m_TagString: Untagged
@@ -55,13 +55,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4273a2247dae2294aae75e185533b928, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  scriptName: Game/UI/Inspector
-  keys:
-  - PrefabInput
-  - PrefabDropDown
-  gameObjects:
-  - {fileID: 1000012241695574, guid: 4e17d49ee59403349841bec6d7fd8806, type: 2}
-  - {fileID: 1000012133072164, guid: 04bd84a5b7a260c4d81cd00afdee1186, type: 2}
+  scriptName: Game.UI.Inspector
+  objectKeys: []
+  objects: []
   eventKeys: []
   events: []
   _InitChunk: 
@@ -85,6 +81,8 @@ MonoBehaviour:
   m_Spacing: 0
   m_ChildForceExpandWidth: 1
   m_ChildForceExpandHeight: 1
+  m_ChildControlWidth: 1
+  m_ChildControlHeight: 1
 --- !u!114 &114000013823106848
 MonoBehaviour:
   m_ObjectHideFlags: 1
@@ -127,10 +125,10 @@ RectTransform:
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 1}
   m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}

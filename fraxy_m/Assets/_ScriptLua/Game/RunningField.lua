@@ -1,7 +1,7 @@
 local Global = require 'Game.Global'
 local Unity = require 'unity.Unity'
 local Droid = require 'Game.Droid'
-local Bridge = require 'Game.Bridge'
+
 
 local R = {}
 
@@ -11,7 +11,7 @@ function R:Awake()
 	Global.RunningField = self
 end
 
-function R:OnDestroy()
+-- function R:OnDestroy()
 	Global.RunningField = nil
 end
 
@@ -38,7 +38,7 @@ end
 
 function R:NewSprite(spriteName)
 	local go = Bridge.LoadSprite(spriteName)
-	local t = Bridge.GetLBT(go)
+	local t = Unity.Lua.GetLBT(go)
 	t.Destroy = DestroyGameObject
 	return t
 end

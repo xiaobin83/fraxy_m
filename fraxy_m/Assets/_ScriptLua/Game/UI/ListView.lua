@@ -1,4 +1,4 @@
-local Bridge = require 'Game.Bridge'
+
 local Unity = require 'unity.Unity'
 local GameObject = Unity.GameObject
 
@@ -19,7 +19,7 @@ function ListView:SetConent(list)
 	for i, v in ipairs(list) do
 		local go = GameObject.Instantiate(self.prefabItem)
 		go.transform:SetParent(self.content, false)
-		local t = Bridge.GetLBT(go)
+		local t = Unity.Lua.GetLBT(go)
 		if t.OnItemCreated then
 			t:OnItemCreated(v)
 		end
@@ -29,7 +29,7 @@ end
 function ListView:Add(item)
 	local go = GameObject.Instantiate(self.prefabItem)
 	go.transform:SetParent(self.content, false)
-	local t = Bridge.GetLBT(go)
+	local t = Unity.Lua.GetLBT(go)
 	if t.OnItemCreated then
 		t:OnItemCreated(item)
 	end

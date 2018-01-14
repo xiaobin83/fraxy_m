@@ -1,7 +1,6 @@
 local Unity = require 'unity.Unity'
 local Input = require 'Input'
 local Timer = require 'Timer'
-local Debug = require 'unity.Debug'
 local GameObject = Unity.GameObject
 
 local Bridge = {}

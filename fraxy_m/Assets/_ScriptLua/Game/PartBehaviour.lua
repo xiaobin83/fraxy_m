@@ -1,7 +1,6 @@
 local Part = {}
 local Global = require 'Game.Global'
 local Unity = require 'unity.Unity'
-local Debug = require 
 local PartType = require 'Game.PartType'
 local T = require 'Text'
 local Prop = require 'Game.UI.Prop'

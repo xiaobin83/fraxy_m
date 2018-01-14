@@ -1,6 +1,5 @@
 local Unity = require 'unity.Unity'
-local Bridge = require 'Game.Bridge'
-local Debug = require 
+
 
 local Inspector = {}
 
@@ -46,7 +45,7 @@ function Inspector:InputField(label, text, type)
 		item = {}
 		local go = GameObject.Instantiate(self.prefabInput)
 		go.transform:SetParent(self.transform, false)
-		local lbt = Bridge.GetLBT(go)
+		local lbt = Unity.Lua.GetLBT(go)
 		lbt:SetLabel(label)
 		lbt:SetContentType(type or 'alphanumeric')
 		lbt:AddListener(
@@ -74,7 +73,7 @@ function Inspector:DropDown(label, items, selectedIndex)
 		item = {}
 		local go = GameObject.Instantiate(self.prefabDropDown)
 		go.transform:SetParent(self.transform, false)
-		local lbt = Bridge.GetLBT(go)
+		local lbt = Unity.Lua.GetLBT(go)
 		lbt:SetLabel(label)
 		lbt:AddListener(
 			function(event, object)
@@ -108,7 +107,7 @@ function Inspector:Start()
 	local go = GameObject.Instantiate(self.prefabDropDown)
 	go.transform:SetParent(self.transform, false)
 
-	local lbt = Bridge.GetLBT(go)
+	local lbt = Unity.Lua.GetLBT(go)
 	lbt:SetTitle('MyDropDown')
 	lbt:AddListener(
 		function(event, object)
