@@ -457,6 +457,41 @@ namespace lua
 			return 1;
 		}
 
+#if UNITY_EDITOR
+		void Editor_SetPath(string pathToUnity3DLua)
+		{
+			// path
+			var path = Application.dataPath;
+			path = System.IO.Path.Combine(path, pathToUnity3DLua);
+			path = System.IO.Path.Combine(path, "Modules");
+			path = path.Replace('\\', '/');
+			var luaPath = path + "/?.lua;" + path +"/?/init.lua;" + path + "/protobuf/?.lua";
+			AddPath(luaPath);
+
+			// cpath
+			path = Application.dataPath;
+			path = System.IO.Path.Combine(path, pathToUnity3DLua);
+			path = System.IO.Path.Combine(path, "Libs/Windows");
+			if (IntPtr.Size > 4)
+				path = System.IO.Path.Combine(path, "x86_64");
+			else
+				path = System.IO.Path.Combine(path, "x86");
+			path = path.Replace('\\', '/');
+			var luaCPath = path + "/?.dll;"+path + "/?/init.dll";
+			AddCPath(luaCPath);
+
+		}
+
+		public void Editor_UpdatePath()
+		{
+			var paths = editorGetPath();
+			foreach (var p in paths)
+			{
+				Editor_SetPath(p);
+			}
+		}
+#endif
+
 		public Lua()
 		{
 #if ALLOC_FROM_CSHARP
@@ -469,6 +504,7 @@ namespace lua
 
 			// put an anchor at _G['__host']
 			SetHost();
+			SetEnv();
 
 			Api.luaL_requiref(L, "csharp", OpenCsharpLib, 1);
 			csharp = LuaTable.MakeRefTo(this, -1);
@@ -548,6 +584,26 @@ namespace lua
 				csharp["as_bytes"] = asBytes;
 				asBytes.Dispose();
 
+
+				var origin = new System.DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc);
+				var timeStamp = LuaFunction.CreateDelegate(this, new System.Func<double>(
+					() =>
+					{
+						return DateTime.UtcNow.Subtract(origin).TotalSeconds;
+					})); 
+				csharp["timestamp"] = timeStamp;
+				timeStamp.Dispose();
+				timeStamp = null;
+
+				var timeString = LuaFunction.CreateDelegate(this, new System.Func<string>(
+					() =>
+					{
+						return DateTime.UtcNow.ToString("MM/dd HH:mm:ss.fff");
+					}));
+				csharp["timeString"] = timeString;
+				timeString.Dispose();
+				timeString = null;
+
 				Api.lua_pop(L, 2); // pop those
 
 				LuaAdditionalFunctions.Open(this);
@@ -576,27 +632,7 @@ namespace lua
 
 			// set default path
 #if UNITY_EDITOR
-			// path
-			var path = Application.dataPath;
-			path = System.IO.Path.Combine(path, "Plugins");
-			path = System.IO.Path.Combine(path, "Unity3D.Lua");
-			path = System.IO.Path.Combine(path, "Modules");
-			path = path.Replace('\\', '/');
-			var luaPath = path + "/?.lua;" + path +"/?/init.lua";
-			AddPath(luaPath);
-
-			// cpath
-			path = Application.dataPath;
-			path = System.IO.Path.Combine(path, "Plugins");
-			path = System.IO.Path.Combine(path, "Unity3D.Lua");
-			path = System.IO.Path.Combine(path, "Windows");
-			if (IntPtr.Size > 4)
-				path = System.IO.Path.Combine(path, "x86_64");
-			else
-				path = System.IO.Path.Combine(path, "x86");
-			path = path.Replace('\\', '/');
-			var luaCPath = path + "/?.dll;"+path + "/?/init.dll";
-			AddCPath(luaCPath);
+			Editor_UpdatePath();
 #endif
 		}
 
@@ -653,12 +689,12 @@ namespace lua
 
 		public void AddCPath(string cpath)
 		{
-			addPath.Invoke(null, "cpath", cpath);
+			addPath.Invoke("cpath", cpath);
 		}
 
 		public void AddPath(string path)
 		{
-			addPath.Invoke(null, "path", path);
+			addPath.Invoke("path", path);
 		}
 
 		const string kLuaStub_ForbidGlobalVar =
@@ -720,6 +756,37 @@ namespace lua
 				return (string)hexDump.Invoke1(null, data);
 			}
 			return string.Empty;
+		}
+
+		void SetEnv()
+		{
+			var tbl = new LuaTable(this);
+
+			tbl["IS_PLAYING"] = Application.isPlaying;
+
+#if UNITY_EDITOR
+			tbl["EDITOR"] = true;
+#endif
+
+#if UNITY_5
+			tbl["5"] = true;
+#endif
+
+#if UNITY_2017
+			tbl["2017"] = true;
+#endif
+
+#if UNITY_IOS
+			tbl["IOS"] = true;
+#endif
+
+#if UNITY_ANDROID
+			tbl["ANDROID"] = true;
+#endif
+			tbl.Push();
+			Api.lua_setglobal(L, "_UNITY");
+			tbl.Dispose();
+
 		}
 
 		const string kHost = "__host";
@@ -788,7 +855,32 @@ namespace lua
 			catch (Exception e)
 			{
 				Api.lua_settop(L, top);
-				Api.lua_pushstring(L, e.Message);
+				PushErrorObject(L, e.Message);
+			}
+			return 1;
+		}
+
+		[MonoPInvokeCallback(typeof(Api.lua_CFunction))]
+		static int DoChunk(IntPtr L)
+		{
+			var top = Api.lua_gettop(L);
+			var chunk = TestBytes(L, 1);
+			if (chunk == null)
+			{
+				Api.lua_settop(L, top);
+				PushErrorObject(L, "nil chunk");
+			}
+			var chunkName = Api.lua_tostring(L, 2);
+			try
+			{
+				LoadChunkInternal(L, chunk, chunkName);
+				CallInternal(L, 0, Api.LUA_MULTRET);
+				return Api.lua_gettop(L) - top;
+			}
+			catch (Exception e)
+			{
+				Api.lua_settop(L, top);
+				PushErrorObject(L, e.Message);
 			}
 			return 1;
 		}
@@ -800,6 +892,7 @@ namespace lua
 			{
 				new Api.luaL_Reg("import", Import),
 				new Api.luaL_Reg("dofile", DoFile),
+				new Api.luaL_Reg("dochunk", DoChunk),
 				new Api.luaL_Reg("_break", _Break),
 				new Api.luaL_Reg("make_array", MakeArray),
 				new	Api.luaL_Reg("to_enum",	ToEnum),
@@ -838,7 +931,6 @@ namespace lua
 			return type;
 		}
 		
-
 		public static LuaScriptLoaderAttribute.ScriptLoader scriptLoader;
 		static LuaScriptLoaderAttribute.ScriptLoader loadScriptFromFile
 		{
@@ -847,6 +939,41 @@ namespace lua
 				if (scriptLoader == null)
 					return DefaultScriptLoader;
 				return scriptLoader;
+			}
+		}
+
+
+
+		static string[] DefaultEditorGetPath()
+		{
+#if UNITY_EDITOR 
+			if (!Application.isPlaying)
+			{
+				var getPath = LuaEditorGetPathDelegateAttribute.GetDelegate();
+				if (getPath != null)
+				{
+					return getPath();
+				}
+			}
+			// -- default path
+			return new string[] {
+				"Unity3D.Lua",
+				System.IO.Path.Combine("Plugins", "Unity3D.Lua")
+			};
+#else
+			return new string[0];
+#endif
+		}
+
+
+		public static LuaEditorGetPathDelegateAttribute.GetPathDelegate editorGetPathDelegate;
+		static LuaEditorGetPathDelegateAttribute.GetPathDelegate editorGetPath
+		{
+			get
+			{
+				if (editorGetPathDelegate == null)
+					return DefaultEditorGetPath;
+				return editorGetPathDelegate;
 			}
 		}
 
@@ -1152,7 +1279,7 @@ namespace lua
 			return PushObjectInternal(L, obj, metaTableName);
 		}
 
-		internal static int PushObjectInternal(IntPtr L, object obj, string metaTableName = objectMetaTable)
+		public static int PushObjectInternal(IntPtr L, object obj, string metaTableName = objectMetaTable)
 		{
 			var handleToObj = GCHandle.Alloc(obj);
 			var ptrToObjHandle = GCHandle.ToIntPtr(handleToObj);
@@ -1179,7 +1306,7 @@ namespace lua
 			return userdata;
 		}
 
-		internal static object ObjectAtInternal(IntPtr L, int idx)
+		public static object ObjectAtInternal(IntPtr L, int idx)
 		{
 			var userdata = TestUdata(L, idx);
 			if (userdata != IntPtr.Zero)
@@ -1276,7 +1403,7 @@ namespace lua
 			return ValueAtInternal(L, idx);
 		}
 
-		internal static object ValueAtInternal(IntPtr L, int idx)
+		public static object ValueAtInternal(IntPtr L, int idx)
 		{
 			var type = Api.lua_type(L, idx);
 			switch (type)
@@ -1652,7 +1779,7 @@ namespace lua
 							Api.lua_pushvalue(L, luaArgIdx);
 							Api.lua_xmove(L, host, 1);
 							t = LuaTable.MakeRefTo(host, -1);
-							Api.lua_pop(L, 1);
+							Api.lua_pop(host, 1);
 						}
 						isDisposable = true;
 						actualArgs.SetValue(t, idx);
@@ -1671,7 +1798,7 @@ namespace lua
 							Api.lua_pushvalue(L, luaArgIdx);
 							Api.lua_xmove(L, host, 1);
 							t = LuaFunction.MakeRefTo(host, -1);
-							Api.lua_pop(L, 1);
+							Api.lua_pop(host, 1);
 						}
 						if (type == typeof(System.Action))
 						{
@@ -1709,7 +1836,7 @@ namespace lua
 							Api.lua_pushvalue(L, luaArgIdx);
 							Api.lua_xmove(L, host, 1);
 							t = LuaThread.MakeRefTo(host, -1);
-							Api.lua_pop(L, 1);
+							Api.lua_pop(host, 1);
 						}
 						isDisposable = true;
 						actualArgs.SetValue(t, idx);
@@ -2137,6 +2264,7 @@ namespace lua
 			if (obj == null)
 				throw new LuaException("invoking target not found at upvalueindex(2)");
 			var members = (System.Reflection.MemberInfo[])ObjectAtInternal(L, Api.lua_upvalueindex(3));
+
 			Type[] exactTypes = null;
 			Type[] genericTypes = null;
 			var upvalueIndex = 4;
@@ -2297,7 +2425,7 @@ namespace lua
 			{
 				throw new LuaException("stack changed after converted args from lua.");
 			}
-
+			
 			var retVal = mc.method.Invoke(target, actualArgs);
 
 			if (disposableArgs != null)
@@ -2331,6 +2459,7 @@ namespace lua
 					++outValues;
 				}
 			}
+
 			return outValues;
 		}
 
@@ -2607,92 +2736,100 @@ namespace lua
 
 		internal static int GetMember(IntPtr L, object obj, Type objType, string memberName, bool hasPrivatePrivillage, Type[] exactTypes, Type[] genericTypes)
 		{
-			var members = GetMembers(objType, memberName, hasPrivatePrivillage);
-			System.Reflection.MemberInfo member = null;
-			if (members.Length > 0)
+			//UnityEngine.Profiling.Profiler.BeginSample("Lua.GetMember");
+			try
 			{
-				member = members[0];
-			}
+				var members = GetMembers(objType, memberName, hasPrivatePrivillage);
+				System.Reflection.MemberInfo member = null;
+				if (members.Length > 0)
+				{
+					member = members[0];
+				}
 
-			if (member == null)
-			{
-				// search into base	class of obj
-				if (objType != typeof(object))
-					return GetMember(L, obj, objType.BaseType, memberName, hasPrivatePrivillage, exactTypes, genericTypes);
-				Api.lua_pushnil(L);
-				return 1;
-			}
-			else if (member.MemberType == System.Reflection.MemberTypes.Field)
-			{
-				var field = (System.Reflection.FieldInfo)member;
-				if (field.FieldType.IsEnum)
+				if (member == null)
 				{
-					PushValueInternal(L, (int)field.GetValue(obj));
+					// search into base	class of obj
+					if (objType != typeof(object))
+						return GetMember(L, obj, objType.BaseType, memberName, hasPrivatePrivillage, exactTypes, genericTypes);
+					Api.lua_pushnil(L);
+					return 1;
 				}
-				else
+				else if (member.MemberType == System.Reflection.MemberTypes.Field)
 				{
-					PushValueInternal(L, field.GetValue(obj));
-				}
-				return 1;
-			}
-			else if (member.MemberType == System.Reflection.MemberTypes.Property)
-			{
-				var prop = (System.Reflection.PropertyInfo)member;
-				try
-				{
-					if (prop.PropertyType.IsEnum)
+					var field = (System.Reflection.FieldInfo)member;
+					if (field.FieldType.IsEnum)
 					{
-						PushValueInternal(L, (int)prop.GetValue(obj, null));
+						PushValueInternal(L, (int)field.GetValue(obj));
 					}
 					else
 					{
-						PushValueInternal(L, prop.GetValue(obj, null));
+						PushValueInternal(L, field.GetValue(obj));
 					}
 					return 1;
 				}
-				catch (ArgumentException ae)
+				else if (member.MemberType == System.Reflection.MemberTypes.Property)
+				{
+					var prop = (System.Reflection.PropertyInfo)member;
+					try
+					{
+						if (prop.PropertyType.IsEnum)
+						{
+							PushValueInternal(L, (int)prop.GetValue(obj, null));
+						}
+						else
+						{
+							PushValueInternal(L, prop.GetValue(obj, null));
+						}
+						return 1;
+					}
+					catch (ArgumentException ae)
+					{
+						// search into base	class of obj
+						if (objType == typeof(object))
+							throw new LuaException(string.Format("Member {0} not found. {1}", memberName, ae.Message));
+						return GetMember(L, obj, objType.BaseType, memberName, hasPrivatePrivillage, exactTypes, genericTypes);
+					}
+				}
+				else if (member.MemberType == System.Reflection.MemberTypes.Method)
+				{
+					long invocationFlags = (obj == null) ? (long)InvocationFlags.Static : 0;
+					int upvalues = 3;
+					if (exactTypes != null)
+					{
+						invocationFlags |= (long)InvocationFlags.ExactMatch;
+						++upvalues;
+					}
+					if (genericTypes != null)
+					{
+						invocationFlags |= (long)InvocationFlags.GenericMethod;
+						++upvalues;
+					}
+					Api.lua_pushinteger(L, invocationFlags);     // upvalue 1 --> invocationFlags
+					Api.lua_pushvalue(L, 1);                     // upvalue 2 --> userdata, first parameter of __index
+					PushObjectInternal(L, members);              // upvalue 3 --> cached members
+					if (exactTypes != null)
+					{
+						PushObjectInternal(L, exactTypes);       // upvalue 4
+					}
+					if (genericTypes != null)
+					{
+						PushObjectInternal(L, genericTypes);     // upvalue 5
+					}
+					Api.lua_pushcclosure(L, InvokeMethod, upvalues);    // return a wrapped lua_CFunction
+					return 1;
+				}
+				else
 				{
 					// search into base	class of obj
-					if (objType == typeof(object))
-						throw new LuaException(string.Format("Member {0} not found. {1}", memberName, ae.Message));
-					return GetMember(L, obj, objType.BaseType, memberName, hasPrivatePrivillage, exactTypes, genericTypes);
+					if (objType != typeof(object))
+						return GetMember(L, obj, objType.BaseType, memberName, hasPrivatePrivillage, exactTypes, genericTypes);
+					Api.lua_pushnil(L);
+					return 1;
 				}
 			}
-			else if (member.MemberType == System.Reflection.MemberTypes.Method)
+			finally
 			{
-				long invocationFlags = (obj == null) ? (long)InvocationFlags.Static : 0;
-				int upvalues = 3;
-				if (exactTypes != null)
-				{
-					invocationFlags |= (long)InvocationFlags.ExactMatch;
-					++upvalues;
-				}
-				if (genericTypes != null)
-				{
-					invocationFlags |= (long)InvocationFlags.GenericMethod;
-					++upvalues;
-				}
-				Api.lua_pushinteger(L, invocationFlags);     // upvalue 1 --> invocationFlags
-				Api.lua_pushvalue(L, 1);                     // upvalue 2 --> userdata, first parameter of __index
-				PushObjectInternal(L, members);              // upvalue 3 --> cached members
-				if (exactTypes != null)
-				{
-					PushObjectInternal(L, exactTypes);       // upvalue 4
-				}
-				if (genericTypes != null)
-				{
-					PushObjectInternal(L, genericTypes);     // upvalue 5
-				}
-				Api.lua_pushcclosure(L, InvokeMethod, upvalues);    // return a wrapped lua_CFunction
-				return 1;
-			}
-			else
-			{
-				// search into base	class of obj
-				if (objType != typeof(object))
-					return GetMember(L, obj, objType.BaseType, memberName, hasPrivatePrivillage, exactTypes, genericTypes);
-				Api.lua_pushnil(L);
-				return 1;
+				//UnityEngine.Profiling.Profiler.EndSample();
 			}
 		}
 
@@ -2750,6 +2887,9 @@ namespace lua
 
 		internal static object ConvertTo(object value, Type type)
 		{
+			if (value == null)
+				return null;
+
 			if (value.GetType() == type)
 			{
 				return value;

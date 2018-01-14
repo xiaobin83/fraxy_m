@@ -76,6 +76,14 @@ namespace lua
 			}
 
 			var type = (System.Type)typeObj;
+
+			if (luaArgTypes == Lua.luaArgTypes_NoArgs && type.IsValueType)
+			{
+				var value = Activator.CreateInstance(type);
+				Lua.PushObjectInternal(L, value);
+				return 1;
+			}
+
 			var mangledName = Lua.CheckHost(L).Mangle("__ctor", luaArgTypes, invokingStaticMethod: true, argStart: 2);
 			var mc = Lua.GetMethodFromCache(type, mangledName);
 			System.Reflection.ParameterInfo[] parameters = null;
@@ -102,7 +110,6 @@ namespace lua
 							pendingExceptions = new List<Exception>();
 						pendingExceptions.Add(e);
 					}
-
 				}
 				if (selected != null)
 				{
@@ -142,6 +149,7 @@ namespace lua
 		[MonoPInvokeCallback(typeof(Api.lua_CFunction))]
 		internal static int MetaIndexFunction(lua_State L)
 		{
+			//UnityEngine.Profiling.Profiler.BeginSample("MetaIndexFunction");
 			try
 			{
 				return MetaIndexFunctionInternal(L);
@@ -150,6 +158,10 @@ namespace lua
 			{
 				Lua.PushErrorObject(L, e.Message);
 				return 1;
+			}
+			finally
+			{
+				//UnityEngine.Profiling.Profiler.EndSample();
 			}
 		}
 
@@ -293,7 +305,6 @@ namespace lua
 					using (var ret = host.testPrivillage.InvokeMultiRet(p))
 					{
 						var name = (string)ret[1];
-						var hasPrivillage = (bool)ret[2];
 						Lua.SetMember(L, thisObject, typeObject, name, Lua.ValueAtInternal(L, 3), hasPrivatePrivillage: true);
 					}
 				}
@@ -381,8 +392,12 @@ namespace lua
 					|| (obj2 != null && obj2.Equals(obj1)))
 				{
 					Api.lua_pushboolean(L, true);
-					return 1;
 				}
+				else
+				{
+					Api.lua_pushboolean(L, false);
+				}
+				return 1;
 			}
 			var obj = obj1;
 			if (obj == null)

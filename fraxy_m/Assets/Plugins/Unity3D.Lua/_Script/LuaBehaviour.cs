@@ -118,11 +118,10 @@ namespace lua
 
 		[SerializeField]
 		[HideInInspector]
-		string[] keys;
+		string[] objectKeys;
 		[SerializeField]
 		[HideInInspector]
-		GameObject[] gameObjects;
-
+		UnityEngine.Object[] objects;
 
 		[SerializeField]
 		[HideInInspector]
@@ -175,6 +174,20 @@ namespace lua
 			Event_PointerEnter,
 			Event_PointerExit,
 
+			Event_BeginDrag,
+			Event_Drag,
+			Event_EndDrag,
+
+            Event_GestureTwoFingerBegin,
+            Event_GestureTwoFingerMove,
+            Event_GestureTwoFingerEnd,
+
+            OnLowMemory,
+
+			OnDrawGizmos,
+			OnDrawGizmosSelected,
+			OnGUI,
+
 			_Count
 		}
 
@@ -195,10 +208,10 @@ namespace lua
 			}
 		}
 
-		int messageFlag = 0;
-		static int MakeFlag(Message m)
+		ulong messageFlag = 0;
+		static ulong MakeFlag(Message m)
 		{
-			return 1 << (int)m;
+			return (ulong)1 << (int)m;
 		}
 
 		int handleToThis = Api.LUA_NOREF;
@@ -211,13 +224,17 @@ namespace lua
 			}
 		}
 		int luaBehaviourRef = Api.LUA_NOREF;
-
-		public void LoadScript(string scriptName)
+        public int GetLuaBehaviourRef()
+        {
+            return luaBehaviourRef;
+        }
+        public void LoadScript(string scriptName)
 		{
 			if (!scriptLoaded)
 			{
 				this.scriptName = scriptName;
 				Awake();
+				OnEnable();
 			}
 			else
 			{
@@ -276,7 +293,7 @@ namespace lua
 				L.DoString("return function(be, script)\n" +
 							"  return function(t, key)\n" +
 							"    local val = script[key]\n"	+
-							"    if not val then val = be[key] end\n" +
+							"    if type(val) == 'nil' then val = be[key] end\n" +
 							"    return val\n" +
 							"  end\n" +
 							"end", 1, "LuaBehaviour_GetMetaIndexFunction");
@@ -296,7 +313,7 @@ namespace lua
 				{
 					Api.lua_pushstring(L, i.ToString());
 					// stack: script table, instance table, key
-					Api.lua_rawget(L, -3);
+					Api.lua_gettable(L, -3);
 					// stack: script table, instance table, function?
 					if (Api.lua_isfunction(L, -1))
 					{
@@ -311,7 +328,7 @@ namespace lua
 				}
 
 				// choose script
-				int flag = messageFlag & (MakeFlag(Message.Update) | MakeFlag(Message.FixedUpdate) | MakeFlag(Message.LateUpdate));
+				ulong flag = messageFlag & (MakeFlag(Message.Update) | MakeFlag(Message.FixedUpdate) | MakeFlag(Message.LateUpdate));
 				var componentType = Type.GetType("lua.LuaInstanceBehaviour" + flag.ToString());
 				instanceBehaviours.Add(gameObject.AddComponent(componentType) as LuaInstanceBehaviour0);
 
@@ -371,6 +388,30 @@ namespace lua
 					instanceBehaviours.Add(gameObject.AddComponent<LuaPointerEventHander>());
 				}
 
+				flag = messageFlag & (MakeFlag(Message.Event_Drag) | MakeFlag(Message.Event_BeginDrag) | MakeFlag(Message.Event_EndDrag));
+				if (flag != 0)
+				{
+					instanceBehaviours.Add(gameObject.AddComponent<LuaDragEventHandler>());
+				}
+
+                flag = messageFlag & (MakeFlag(Message.Event_GestureTwoFingerBegin) | MakeFlag(Message.Event_GestureTwoFingerMove) | MakeFlag(Message.Event_GestureTwoFingerEnd));
+                if (flag != 0)
+                {
+                    instanceBehaviours.Add(gameObject.AddComponent<LuaGestureTwoFingerEventHandler>());
+                }
+
+                flag = messageFlag & MakeFlag(Message.OnLowMemory);
+				if (flag != 0)
+				{
+					instanceBehaviours.Add(gameObject.AddComponent<LuaLowMemoryHandler>());
+				}
+
+				flag = messageFlag & (MakeFlag(Message.OnDrawGizmos) | MakeFlag(Message.OnDrawGizmosSelected) | MakeFlag(Message.OnGUI));
+				if (flag != 0)
+				{
+					instanceBehaviours.Add(gameObject.AddComponent<LuaMiscBehaviour>());
+				}
+
 				Api.lua_pop(L, 2); // pop instance table, script table
 
 				scriptLoaded_ = true;
@@ -391,8 +432,11 @@ namespace lua
 				// Awake Lua script
 				for (int i = 0; i < instanceBehaviours.Count; ++i)
 				{
+					instanceBehaviours[i].hideFlags = HideFlags.DontSaveInBuild | HideFlags.DontSaveInEditor | HideFlags.NotEditable;
 					instanceBehaviours[i].SetLuaBehaviour(this);
+					instanceBehaviours[i].enabled = false;
 				}
+				SendLuaMessage(LuaBehaviour.Message.Awake); // Awake Lua Script
 			}
 			else
 			{
@@ -449,6 +493,11 @@ namespace lua
 
 		void OnDestroy()
 		{
+			foreach (var thread in runningCoroutines)
+			{
+				thread.Dispose();
+			}
+			runningCoroutines.Clear();
 			SendLuaMessage(Message.OnDestroy);
 			if (L != null && L.valid)
 			{
@@ -505,14 +554,73 @@ namespace lua
 			return null;
 		}
 
+		public void BroadcastLuaMessage(string message, LuaTable obj)
+		{
+			if(!scriptLoaded) return;
+
+			var children = GetComponentsInChildren<LuaBehaviour>();
+			if(children == null)
+			{
+				return;
+			}
+
+			foreach(var ch in children)
+			{
+				ch.SendLuaMessage(message, obj);
+			}
+		}
+
+		public void SendLuaMessageUpwards(string message, LuaTable obj)
+		{
+			if(!scriptLoaded) return;
+
+			var parents = GetComponentsInParent<LuaBehaviour>();
+			if(parents == null)
+			{
+				return;
+			}
+
+			foreach(var p in parents)
+			{
+				p.SendLuaMessage(message, obj);
+			}
+		}
+
+		public void SendLuaMessage(string message, LuaTable tbl)
+		{
+			if(!scriptLoaded) return;
+
+			Api.lua_rawgeti(L, Api.LUA_REGISTRYINDEX, luaBehaviourRef);
+			if(Api.lua_getfield(L, -1, message) == Api.LUA_TFUNCTION)
+			{
+				Api.lua_pushvalue(L, -2);
+				tbl.Push();
+				try
+				{
+					L.Call(2, 0);
+				}
+				catch(Exception e)
+				{
+					Debug.LogErrorFormat("Invoke {0}.{1} failed: {2}", scriptName, message, e.Message);
+				}
+			}
+			Api.lua_pop(L, 1); // pop behaviour table
+		}
+
 		public void SendLuaMessage2(string message)
 		{
 			if (!scriptLoaded || string.IsNullOrEmpty(message)) return;
 			var funcAndParams = message.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
 			if (funcAndParams.Length >= 1)
 			{
+				var top = Api.lua_gettop(L);
 				Api.lua_rawgeti(L, Api.LUA_REGISTRYINDEX, luaBehaviourRef);
-				Api.lua_getfield(L, -1, message);
+				Api.lua_getfield(L, -1, funcAndParams[0]);
+				if (Api.lua_isnil(L, -1))
+				{
+					Api.lua_settop(L, top);
+					return;
+				}
 				Api.lua_pushvalue(L, -2);
 				for (int i = 1; i < funcAndParams.Length; ++i)
 				{
@@ -526,25 +634,27 @@ namespace lua
 				{
 					Debug.LogErrorFormat("Invoke {0}.{1} failed: {2}", scriptName, message, e.Message);
 				}
-				Api.lua_pop(L, 1);
+				Api.lua_settop(L, top);
 			}
 		}
-		
+
 		public void SendLuaMessage(string message, object obj)
 		{
 			if (!scriptLoaded) return;
 
 			Api.lua_rawgeti(L, Api.LUA_REGISTRYINDEX, luaBehaviourRef);
-			Api.lua_getfield(L, -1, message);
-			Api.lua_pushvalue(L, -2);
-			L.PushObject(obj);
-			try
+			if(Api.lua_getfield(L, -1, message) == Api.LUA_TFUNCTION)
 			{
-				L.Call(2, 0);
-			}
-			catch (Exception e)
-			{
-				Debug.LogErrorFormat("Invoke {0}.{1} failed: {2}", scriptName, message, e.Message);
+				Api.lua_pushvalue(L, -2);
+				L.PushObject(obj);
+				try
+				{
+					L.Call(2, 0);
+				}
+				catch(Exception e)
+				{
+					Debug.LogErrorFormat("Invoke {0}.{1} failed: {2}", scriptName, message, e.Message);
+				}
 			}
 			Api.lua_pop(L, 1); // pop behaviour table
 		}
@@ -554,16 +664,18 @@ namespace lua
 			if (!scriptLoaded) return;
 
 			Api.lua_rawgeti(L, Api.LUA_REGISTRYINDEX, luaBehaviourRef);
-			Api.lua_getfield(L, -1, message);
-			Api.lua_pushvalue(L, -2);
-			Api.lua_pushstring(L, parameter);
-			try
+			if(Api.lua_getfield(L, -1, message) == Api.LUA_TFUNCTION)
 			{
-				L.Call(2, 0);
-			}
-			catch (Exception e)
-			{
-				Debug.LogErrorFormat("Invoke {0}.{1} failed: {2}", scriptName, message, e.Message);
+				Api.lua_pushvalue(L, -2);
+				Api.lua_pushstring(L, parameter);
+				try
+				{
+					L.Call(2, 0);
+				}
+				catch(Exception e)
+				{
+					Debug.LogErrorFormat("Invoke {0}.{1} failed: {2}", scriptName, message, e.Message);
+				}
 			}
 			Api.lua_pop(L, 1); // pop behaviour table
 		}
@@ -588,8 +700,11 @@ namespace lua
 			Api.lua_pop(L, 1); // pop behaviour table
 		}
 
+		List<LuaThread> runningCoroutines = new List<LuaThread>();
 		IEnumerator LuaCoroutine(LuaThread thread)
 		{
+			thread = thread.Retain();
+			runningCoroutines.Add(thread);
 			while (thread.Resume())
 			{
 				if (thread.hasYields)
@@ -598,14 +713,27 @@ namespace lua
 				}
 				yield return null;
 			}
+			runningCoroutines.Remove(thread);
 			thread.Dispose();
 		}
 
 		public void StartLuaCoroutine(LuaThread thread)
 		{
-			StartCoroutine(LuaCoroutine(thread.Retain()));
+			StartCoroutine(LuaCoroutine(thread));
 		}
 
+		bool ShouldReceiveMessage(Message message)
+		{
+			if (enabled) return true;
+			if (message == Message.Awake 
+				|| message == Message.OnDestroy
+				|| message == Message.OnEnable
+				|| message == Message.OnDisable)
+			{
+				return true;
+			}
+			return false;
+		}
 
 		public void SendLuaMessage(Message message)
 		{
@@ -614,6 +742,9 @@ namespace lua
 			if (!scriptLoaded) return;
 
 			if ((messageFlag & MakeFlag(message)) == 0) return; // no message defined
+
+			if (!ShouldReceiveMessage(message))
+				return;
 
 			Api.lua_rawgeti(L, Api.LUA_REGISTRYINDEX, luaBehaviourRef);
 			// get message func	from instance table
@@ -640,6 +771,9 @@ namespace lua
 			if (!scriptLoaded) return;
 
 			if ((messageFlag & MakeFlag(message)) == 0) return; // no message defined
+
+			if (!ShouldReceiveMessage(message))
+				return;
 
 			Api.lua_rawgeti(L, Api.LUA_REGISTRYINDEX, luaBehaviourRef);
 			// get message func	from instance table
@@ -673,7 +807,14 @@ namespace lua
 		byte[] _InitChunk;
 		bool LoadInitFuncToInstanceTable(Lua L)
 		{
-			if (_InitChunk == null || _InitChunk.Length == 0) return false;
+			if (_InitChunk == null || _InitChunk.Length == 0)
+			{
+				// remove _Init func
+				Api.lua_rawgeti(L, Api.LUA_REGISTRYINDEX, luaBehaviourRef);
+				Api.lua_pushnil(L);
+				Api.lua_setfield(L, -2, "_Init");
+				return false;
+			}
 			try
 			{
 				Api.lua_rawgeti(L, Api.LUA_REGISTRYINDEX, luaBehaviourRef);
@@ -691,21 +832,18 @@ namespace lua
 		}
 
 		// non-throw
-		public GameObject FindGameObject(string key)
+		public UnityEngine.Object FindObject(string key)
 		{
-			var index = System.Array.FindIndex(keys, (k) => k == key);
+			var index = System.Array.FindIndex(objectKeys, (k) => k == key);
 			if (index != -1)
-				return GetGameObjectAtIndex(index);
+				return GetObjectAtIndex(index);
 			return null;
 		}
 
-		// non-throw
-		public GameObject GetGameObjectAtIndex(int index)
+		public UnityEngine.Object GetObjectAtIndex(int index)
 		{
-			if (index >= 0 && index < gameObjects.Length)
-			{
-				return gameObjects[index];
-			}
+			if (index >= 0 && index < objects.Length)
+				return objects[index];
 			return null;
 		}
 
