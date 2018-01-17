@@ -138,7 +138,7 @@ namespace utils
 		}
 		List<Graph> graphs = new List<Graph>();
 
-		bool showCmdHandler = true;
+		bool showCmdHandler;
 		lua.LuaFunction cmdHandler;
 		string cmdString;
 		string cmdHandlerName;
