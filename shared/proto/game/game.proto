@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package game;
+
+enum Api {
+	E_Empty = 0;
+	E_Echo = 1001;
+	E_Ready = 1002;
+	E_ReadyAck = 1003;
+	E_StartGame = 1004;
+	E_RespawnActor = 1005;
+	E_Words = 1006;
+	E_SyncTime = 1007;
+	E_SyncTimeAck = 1008;
+	E_ReadyToGo = 1009;
+	E_PlayerReady = 1011;
+	E_ActorRespawned = 1012;
+	E_SyncActors = 1014;
+	E_ActorAction = 1015;
+}
+
+
+message Empty { }
+
+message Vector2 {
+	float x = 1;
+	float y = 2;
+}
+
+message Vector3 {
+	float x = 1;
+	float y = 2;
+	float z = 3;
+}
+
+message Vector4 {
+	float x = 1;
+	float y = 2;
+	float z = 3;
+	float w = 4;
+}
+
+message Echo {
+	string content = 1;
+}
+
+// should put some info for tweaking server tick (for slowest device)
+message Ready {
+}
+
+// should include current server status
+message ReadyAck {
+	string scene = 1;
+	uint32 networkId = 2;
+}
+
+// broadcast, server -> client
+message PlayerReady {
+	repeated uint64 playerIds = 1;
+}
+
+// client -> server (scene loaded, and ready to go)
+message ReadyToGo {
+}
+
+// boardcast, server -> client
+message StartGame {
+}
+
+// client -> server
+message RespawnActor {
+	uint32 nid = 1;
+	uint32 type = 2;
+	Vector3 pos = 3;
+}
+
+// boardcast, server -> client
+message ActorRespawned {
+	uint64 pid = 1;
+	uint32 nid = 2;
+	uint32 type = 3;
+	Vector3 pos = 4;
+	Vector4 rot = 5;
+}
+
+
+message ActorPos {
+	uint32 nid = 1;
+	Vector3 pos = 2;
+	Vector4 rot = 3;
+	Vector3 vel = 4;
+}
+
+message ActorAction {
+	uint64 nid = 1;
+	double ts = 2;
+	uint32 action = 3;
+}
+
+// boardcast, server -> client
+message SyncActors {
+	double ts = 1;
+	repeated ActorPos positions = 2;
+	repeated ActorAction actions = 3;
+}
+
+
+message Words {
+	string content = 1;
+}
+
+message SyncTime {
+	double ts = 1;
+}
+
+message SyncTimeAck {
+	double ts = 1;
+	double srv_ts = 2;
+}

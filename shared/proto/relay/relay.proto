@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package relay;
+
+enum Api {
+	E_Empty = 0;
+	E_Login = 1;
+	E_Pike = 2;
+	E_Forward = 3;
+}
+
+message Empty {}
+
+message Login {
+	string token = 1;
+}
+
+message Pike {
+	uint64 sendSeed = 1;
+	uint64 recvSeed = 2;
+}
+
+message Forward {
+	uint32 from = 1;
+	uint32 to = 2;
+	uint32 msgId = 3;
+	bytes data = 4;
+}
+
+
