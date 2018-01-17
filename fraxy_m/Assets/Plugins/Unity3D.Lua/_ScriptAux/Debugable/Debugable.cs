@@ -138,8 +138,10 @@ namespace utils
 		}
 		List<Graph> graphs = new List<Graph>();
 
+		bool showCmdHandler = true;
 		lua.LuaFunction cmdHandler;
 		string cmdString;
+		string cmdHandlerName;
 
 		string popUpContent = "";
 		bool showPopUp;
@@ -209,16 +211,20 @@ namespace utils
 					GUILayout.EndHorizontal();
 				}
 
-				if (cmdHandler != null)
+				if (showCmdHandler)
 				{
-					cmdString = GUILayout.TextArea(cmdString, GUILayout.Height(80));
-					GUILayout.BeginHorizontal();
-					GUILayout.FlexibleSpace();
-					if (GUILayout.Button("Execute", GUILayout.Width(100)))
+					if (cmdHandler != null)
 					{
-						cmdHandler.Invoke(cmdString);
+						GUILayout.Label(cmdHandlerName);
+						cmdString = GUILayout.TextArea(cmdString, GUILayout.Height(80));
+						GUILayout.BeginHorizontal();
+						GUILayout.FlexibleSpace();
+						if (GUILayout.Button("Execute", GUILayout.Width(100)))
+						{
+							cmdHandler.Invoke(cmdString);
+						}
+						GUILayout.EndHorizontal();
 					}
-					GUILayout.EndHorizontal();
 				}
 				scrollPosition = GUILayout.BeginScrollView(scrollPosition);
 				var oldColor = GUI.color;
@@ -331,8 +337,14 @@ namespace utils
 			graphs.Add(g);
 		}
 
-		public void Editor_SetCmdHandler(lua.LuaFunction func)
+		public void Editor_ToggleCmdHandler()
 		{
+			showCmdHandler = !showCmdHandler;
+		}
+
+		public void Editor_SetCmdHandler(string name, lua.LuaFunction func)
+		{
+			cmdHandlerName = name;
 			cmdHandler = func.Retain();
 		}
 

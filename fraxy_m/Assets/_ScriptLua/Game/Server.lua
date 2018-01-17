@@ -16,7 +16,7 @@ local Time = require 'Utils.Time'
 
 local Unity = require 'unity.Unity'
 local MsgPack = require 'Game.MsgPack'
-local Chan = csharp.checked_import('Networking.Chan') 
+local Chan = csharp.checked_import('networking.Chan') 
 local ChanBreakReason = Chan[{csharp.p_nested_type(), 'BreakReason'}]
 local Reason_ChanModule = ChanBreakReason.ChanModule
 

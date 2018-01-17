@@ -14,7 +14,7 @@ local Profiler = Unity.Profiling.Profiler
 local MsgPack = require 'Game.MsgPack'
 local Utils = require 'Utils.Utils'
 
-local Chan = csharp.checked_import('Networking.Chan') 
+local Chan = csharp.checked_import('networking.Chan') 
 local ChanBreakReason = Chan[{csharp.p_nested_type(), 'BreakReason'}]
 local Reason_ChanModule = ChanBreakReason.ChanModule
 

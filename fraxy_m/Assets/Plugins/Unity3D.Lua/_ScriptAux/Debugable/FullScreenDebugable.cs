@@ -25,9 +25,8 @@ namespace utils
 
 		void Awake()
 		{
-			Editor_SetArea(2 * Screen.width / 3, 0, Screen.width / 3, Screen.height);
+			Editor_SetArea(0, 0, Screen.width, Screen.height);
 			show = true;
-			Editor_AddToolbarButton_Native("PopUp", Editor_TogglePopUp);
 		}
 
 	}
